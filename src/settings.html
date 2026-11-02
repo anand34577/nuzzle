@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Companion settings</title>
+<link rel="stylesheet" href="settings.css">
+<script src="settings-boot.js"></script>
+</head>
+<body>
+<div class="app">
+
+  <header class="titlebar" data-tauri-drag-region="deep">
+    <div class="brand"><span class="logo" aria-hidden="true"></span><span class="brand-name">Companion</span></div>
+    <div id="chip" class="chip" data-state="setup" role="status" aria-live="polite"><i></i><span id="chip-text">Needs setup</span></div>
+    <div class="wc">
+      <button id="wc-min" aria-label="Minimize" title="Minimize"><svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg></button>
+      <button id="wc-max" aria-label="Maximize" title="Maximize"><svg viewBox="0 0 12 12"><rect x="2.2" y="2.2" width="7.6" height="7.6" rx="1"/></svg></button>
+      <button id="wc-close" class="close" aria-label="Close to tray" title="Close to tray (keeps running)"><svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"/></svg></button>
+    </div>
+  </header>
+
+  <nav class="nav" role="tablist" aria-label="Settings sections">
+    <button role="tab" data-tab="setup" aria-selected="true"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span>Setup</span><b class="dot" id="dot-setup"></b></button>
+    <button role="tab" data-tab="character" aria-selected="false"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="5"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg><span>Character</span></button>
+    <button role="tab" data-tab="chat" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span>Chat</span></button>
+    <button role="tab" data-tab="memory" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M6 3h10a2 2 0 0 1 2 2v16l-4-3-4 3-4-3V5a2 2 0 0 1 2-2z"/><path d="M9 8h6M9 12h4"/></svg><span>Memory</span></button>
+    <button role="tab" data-tab="tools" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg><span>Tools</span></button>
+    <button role="tab" data-tab="voice" aria-selected="false"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Voice &amp; sight</span></button>
+    <button role="tab" data-tab="safety" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span>Safety</span></button>
+    <button role="tab" data-tab="appearance" aria-selected="false"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg><span>Appearance</span></button>
+    <button role="tab" data-tab="advanced" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg><span>Advanced</span></button>
+  </nav>
+
+  <main class="content" id="content">
+
+    <!-- ========== SETUP ========== -->
+    <section class="panel" id="panel-setup" role="tabpanel" data-panel="setup">
+      <h1>Set me up</h1>
+      <p class="lead">Everything runs on this computer. Nothing is sent to the internet.</p>
+
+      <ol class="steps">
+        <li class="step" id="step-1">
+          <div class="step-head"><span class="num">1</span><h2>Inference engine</h2><span class="tick" aria-hidden="true"></span></div>
+          <div id="llama-built" class="banner ok" hidden>
+            <strong id="llama-built-title">llama.cpp is built in</strong>
+            <span id="llama-built-sub">Vulkan build, ready to use. Nothing to install.</span>
+          </div>
+          <div id="llama-missing" class="banner warn" hidden>
+            <strong>llama.cpp isn't bundled in this copy</strong>
+            <span>Run <code>npm run fetch:llama</code> in the project folder, or point to your own build below.</span>
+          </div>
+          <details class="own" id="own-llama">
+            <summary>Use my own llama-server build instead (optional)</summary>
+            <div class="field" data-field="llama_server">
+              <label for="llama_server">Program location</label>
+              <div class="row"><input id="llama_server" type="text" placeholder="Leave empty to use the built-in one" autocomplete="off" spellcheck="false"><button class="btn" data-pick="llama_server">Browse</button></div>
+              <div class="msg" aria-live="polite"></div>
+            </div>
+            <div id="llama-found" class="chips"></div>
+            <div class="row wrap"><button class="btn ghost" id="btn-detect-llama">Search this PC</button><button class="btn ghost" data-link="https://github.com/ggml-org/llama.cpp/releases">Releases</button></div>
+          </details>
+        </li>
+
+        <li class="step" id="step-2">
+          <div class="step-head"><span class="num">2</span><h2>Model</h2><span class="tick" aria-hidden="true"></span></div>
+          <div class="dl" id="dl">
+            <div class="dl-top">
+              <div><strong>Recommended: LFM3-Omni-2B (Q4_K_M)</strong>
+                <div class="hint">1.4 GB: the 1.1 GB model plus the 0.3 GB sight &amp; hearing file, from LiquidAI's official Hugging Face page.</div></div>
+              <div class="row"><button class="btn primary" id="dl-start">Download (1.4 GB)</button><button class="btn" id="dl-cancel" hidden>Cancel</button></div>
+            </div>
+            <div class="bar" id="dl-bar" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Download progress"><i id="dl-fill"></i></div>
+            <div class="hint dl-msg" id="dl-msg" role="status" aria-live="polite"></div>
+          </div>
+          <div id="models" class="models" aria-live="polite"></div>
+          <div class="row wrap"><button class="btn ghost" id="btn-scan">Find models on this PC</button><button class="btn ghost" data-link="https://huggingface.co/LiquidAI">LFM models</button></div>
+          <div class="field" data-field="model">
+            <label for="model">Model file</label>
+            <div class="row"><input id="model" type="text" placeholder="C:\models\LFM3-Omni-2B-Q4_K_M.gguf" autocomplete="off" spellcheck="false"><button class="btn" data-pick="model">Browse</button></div>
+            <div class="msg" aria-live="polite"></div>
+          </div>
+          <div class="field" data-field="mmproj">
+            <label for="mmproj">Seeing &amp; hearing file (mmproj)</label>
+            <div class="row"><input id="mmproj" type="text" placeholder="Needed for sight and voice" autocomplete="off" spellcheck="false"><button class="btn" data-pick="mmproj">Browse</button></div>
+            <div class="msg" aria-live="polite"></div>
+          </div>
+        </li>
+
+        <li class="step" id="step-3">
+          <div class="step-head"><span class="num">3</span><h2>Graphics cards</h2><span class="tick" aria-hidden="true"></span></div>
+          <div class="row wrap"><button class="btn ghost" id="detect">Find my graphics cards</button><span id="gpumsg" class="hint inline" role="status"></span></div>
+          <div id="gpus" class="gpus"></div>
+          <div class="hint">Tick one card, or both to share the work. None: llama.cpp decides.</div>
+        </li>
+
+        <li class="step" id="step-4">
+          <div class="step-head"><span class="num">4</span><h2>Wake me up</h2><span class="tick" aria-hidden="true"></span></div>
+          <div id="brainbox" class="brainbox" data-state="setup">
+            <div class="spinner" aria-hidden="true"></div>
+            <div class="grow"><strong id="brain-title">Waiting for setup</strong><div id="brain-detail" class="hint">Choose a model above, then press the button.</div>
+              <div class="bar indet brain-bar" aria-hidden="true"><i></i></div></div>
+          </div>
+          <div class="row wrap"><button class="btn primary" id="btn-wake">Save &amp; wake me up</button><button class="btn ghost" id="btn-logs-2">Open log folder</button></div>
+        </li>
+      </ol>
+    </section>
+
+    <!-- ========== CHARACTER ========== -->
+    <section class="panel" id="panel-character" role="tabpanel" data-panel="character" hidden>
+      <h1>Character</h1>
+      <p class="lead">One friend lives on your screen at a time. Changes apply straight away.</p>
+      <div id="characters" class="characters" role="radiogroup" aria-label="Character"></div>
+
+      <div class="card">
+        <div class="field" data-field="name">
+          <label for="name">Name</label>
+          <input id="name" type="text" maxlength="40" autocomplete="off">
+          <div class="msg" aria-live="polite"></div>
+        </div>
+        <div class="field">
+          <label for="playfulness">How playful I am</label>
+          <select id="playfulness">
+            <option value="quiet">Quiet: calm and plain, no jokes, no idle chatter</option>
+            <option value="normal">Normal: a gentle joke now and then</option>
+            <option value="lively">Lively: chattier and jokier (still polite)</option>
+          </select>
+          <div class="hint">I'm always kind and honest, I keep your screen private, and I never nag.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="size-head"><label for="size">Size on screen</label><output id="size-out" for="size">80%</output></div>
+        <input id="size" class="range" type="range" min="40" max="200" step="5" value="80">
+        <div class="presets" role="group" aria-label="Size presets">
+          <button type="button" class="btn ghost" data-size="50">Tiny</button><button type="button" class="btn ghost" data-size="70">Small</button>
+          <button type="button" class="btn ghost" data-size="100">Normal</button><button type="button" class="btn ghost" data-size="140">Big</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <label class="switch"><input id="avoid_cursor" type="checkbox"><span class="track"></span>
+          <span class="switch-text"><strong>Stay out of your way</strong><small>I won't stand on your text caret or the spot you last clicked, and I step aside if you rest your pointer on me. I stay perfectly still while I'm thinking, talking or you're typing to me.</small></span></label>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Where I may wander</h2></div>
+        <p class="hint" id="area-summary">Anywhere on your screen.</p>
+        <div class="row wrap">
+          <button class="btn" id="area-pick">Choose an area on screen</button>
+          <button class="btn ghost" id="area-clear" disabled>Roam anywhere</button>
+        </div>
+        <p class="hint">You'll draw a rectangle on your screen. I stay inside it and only perch on windows within it.</p>
+      </div>
+    </section>
+
+    <!-- ========== CHAT ========== -->
+    <section class="panel" id="panel-chat" role="tabpanel" data-panel="chat" hidden>
+      <h1>Chat</h1>
+      <p class="lead">What we've said this session. It lives in memory only and disappears when I quit.</p>
+      <div class="card">
+        <div class="card-head"><h2>Conversation <span class="count" id="chat-total"></span></h2>
+          <div class="row"><button class="btn ghost" id="chat-copy" disabled>Copy all</button><button class="btn danger" id="chat-clear" disabled>Clear</button></div></div>
+        <ol id="chat-log" class="chat-log" aria-live="polite"></ol>
+        <p class="hint mem-empty" id="chat-empty">Nothing yet. Talk to me, or press the typing shortcut.</p>
+        <form id="chat-form" class="row" autocomplete="off">
+          <input id="chat-say" type="text" maxlength="2000" placeholder="Type a message..." aria-label="Message to send">
+          <button class="btn primary" id="chat-send-btn" disabled>Send</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ========== MEMORY ========== -->
+    <section class="panel" id="panel-memory" role="tabpanel" data-panel="memory" hidden>
+      <h1>Memory</h1>
+      <p class="lead">Short notes I keep about you. They stay on this computer and you can change them any time.</p>
+      <div class="card">
+        <label class="switch"><input id="memory_enabled" type="checkbox"><span class="track"></span>
+          <span class="switch-text"><strong>Let me remember things</strong><small>I save short notes when you tell me something lasting or ask me to remember it. I never save passwords or card numbers.</small></span></label>
+        <div class="hint" id="mem-off" hidden>Memory is off: I keep your notes but won't use them or add new ones.</div>
+      </div>
+      <div class="card">
+        <div class="field" data-field="mem_new">
+          <label for="mem-new">Add a note</label>
+          <div class="row"><input id="mem-new" type="text" maxlength="300" autocomplete="off" placeholder="e.g. I'm Sam and I like green tea"><button class="btn primary" id="mem-add" disabled>Add</button></div>
+          <div class="msg" aria-live="polite"></div>
+          <div class="hint"><span id="mem-count">0</span> / 300</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>What I remember <span class="count" id="mem-total"></span></h2><button class="btn danger" id="mem-clear" disabled>Clear all</button></div>
+        <ul id="mem-list" class="mem-list"></ul>
+        <p class="hint mem-empty" id="mem-empty">Nothing yet. Add a note above, or just tell me something about you.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Reminders <span class="count" id="rem-total"></span></h2></div>
+        <ul id="rem-list" class="mem-list"></ul>
+        <p class="hint mem-empty" id="rem-empty">None. Ask me: "remind me in 20 minutes to stretch".</p>
+      </div>
+    </section>
+
+    <!-- ========== TOOLS ========== -->
+    <section class="panel" id="panel-tools" role="tabpanel" data-panel="tools" hidden>
+      <h1>Tools</h1>
+      <p class="lead">What I can do beyond chatting. Connect your own MCP servers to give me more.</p>
+
+      <div class="card">
+        <div class="card-head"><h2>Built in</h2></div>
+        <ul class="caps">
+          <li><b>Always</b> Screen view, memory, reminders &amp; timers, date &amp; time, system info, read web pages</li>
+          <li><b>With "computer control" on</b> Mouse &amp; keyboard, files (read, list, write), run commands, clipboard, open links</li>
+        </ul>
+        <p class="hint">Computer control is the hand button on my toolbar. It always starts off.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>MCP servers <span class="count" id="mcp-total"></span></h2>
+          <div class="row"><select id="mcp-template" aria-label="Add from template"><option value="">Add from template...</option><option value="files">Files (filesystem)</option><option value="fetch">Web fetch</option><option value="time">Time</option><option value="blank">Blank server</option></select></div>
+        </div>
+        <p class="hint">MCP servers are programs (or web services) that offer tools. I show you each tool before first use unless you chose full access.</p>
+        <div id="mcps"></div>
+        <p class="hint mem-empty" id="mcp-empty">No servers yet. Pick a template above to start.</p>
+        <div class="row wrap"><button class="btn ghost" id="mcp-reload">Restart servers</button><span id="mcp-note" class="hint inline"></span></div>
+      </div>
+    </section>
+
+    <!-- ========== VOICE & SIGHT ========== -->
+    <section class="panel" id="panel-voice" role="tabpanel" data-panel="voice" hidden>
+      <h1>Voice &amp; sight</h1>
+      <p class="lead">How I speak, listen and look at your screen.</p>
+      <div class="card">
+        <div class="card-head"><h2>Microphone &amp; speaker</h2><span class="hint inline">Changes apply straight away.</span></div>
+
+        <div class="device">
+          <label for="mic_device">Microphone</label>
+          <select id="mic_device"></select>
+          <div class="device-tools">
+            <span class="meter-label" id="mic-label">Input level</span>
+            <div class="meter" role="meter" aria-labelledby="mic-label" aria-valuemin="0" aria-valuemax="100" id="mic-meter-box"><i id="mic-meter"></i></div>
+          </div>
+          <div class="hint" id="mic-using" role="status" aria-live="polite"></div>
+        </div>
+
+        <div class="device">
+          <label for="speaker_device">Speaker</label>
+          <select id="speaker_device"></select>
+          <div class="device-tools">
+            <button type="button" class="btn ghost" id="test-chime">Play a chime</button>
+            <button type="button" class="btn ghost" id="test-voice">Hear my voice</button>
+          </div>
+          <div class="hint" id="spk-using" role="status" aria-live="polite"></div>
+        </div>
+
+        <div class="size-head"><label for="volume">Voice volume</label><output id="volume-out" for="volume">100%</output></div>
+        <input id="volume" class="range" type="range" min="0" max="150" step="5" value="100">
+        <label class="switch"><input id="speak_aloud" type="checkbox"><span class="track"></span>
+          <span class="switch-text"><strong>Speak my replies out loud</strong><small>Off: I stay quiet and you read my words in the bubble (handy in meetings).</small></span></label>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>My voice</h2></div>
+        <p class="hint">Each character has a voice of their own, kept the same from sentence to sentence. I speak as soon as the first words are ready.</p>
+        <div class="grid2">
+          <div class="field" data-field="tts_voice"><label for="tts_voice">Voice type</label>
+            <select id="tts_voice"><option value="female">Female</option><option value="male">Male</option></select><div class="msg"></div></div>
+          <div class="field"><label>Not quite right?</label>
+            <div class="device-tools"><button type="button" class="btn ghost" id="voice-next">Try another voice</button><button type="button" class="btn ghost" id="voice-hear">Hear it</button></div></div>
+        </div>
+        <details class="own" id="own-voice">
+          <summary>Use a recording as my voice (optional)</summary>
+          <div class="field" data-field="voice_ref_path">
+            <label for="voice_ref_path">Voice sample (.wav, 5-15 seconds, one person, clean)</label>
+            <div class="row"><input id="voice_ref_path" type="text" placeholder="Leave empty to use the character's own voice" autocomplete="off" spellcheck="false"><button class="btn" data-pick="voice_ref_path">Browse</button><button class="btn ghost" id="voice-clear">Clear</button></div>
+            <div class="msg" aria-live="polite"></div>
+          </div>
+          <p class="hint">I'll speak like the person in the recording. Only use a voice you have permission to use. The file stays on this computer.</p>
+        </details>
+        <label class="switch"><input id="hear_tone" type="checkbox"><span class="track"></span>
+          <span class="switch-text"><strong>Hear how you say things</strong><small>I get your actual voice, not just the words, so I notice your tone, mood and language. Costs a little extra thinking time per spoken message.</small></span></label>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>How I listen</h2></div>
+        <div class="seg" role="radiogroup" aria-label="Listening mode">
+          <label><input type="radio" name="listen_mode" value="always"><span><strong>Always listening</strong><small>While the mic button is on, I answer whenever I hear speech.</small></span></label>
+          <label><input type="radio" name="listen_mode" value="push"><span><strong>Push to talk</strong><small>I only listen while you hold the shortcut below. Pressing it while I talk interrupts me.</small></span></label>
+        </div>
+        <div class="grid2">
+          <div class="field" data-field="ptt_shortcut"><label for="ptt_shortcut">Push-to-talk shortcut</label>
+            <input id="ptt_shortcut" type="text" autocomplete="off" spellcheck="false" placeholder="CommandOrControl+Shift+Space"><div class="msg"></div></div>
+          <div class="field" data-field="chat_shortcut"><label for="chat_shortcut">Open the typing box</label>
+            <input id="chat_shortcut" type="text" autocomplete="off" spellcheck="false" placeholder="CommandOrControl+Alt+C"><div class="msg"></div></div>
+        </div>
+        <p class="hint">Click a box and press the keys you want. Leave it empty to turn it off. <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Space</kbd> always stops me.</p>
+      </div>
+      <div class="card grid2">
+        <div class="field" data-field="tts_lang"><label for="tts_lang">Speech language code</label>
+          <input id="tts_lang" type="text" placeholder="en" autocomplete="off"><div class="msg"></div></div>
+        <div class="field"><label for="asr-preset">Language I listen for</label>
+          <select id="asr-preset"><option value="Perform ASR in English.">English</option><option value="Perform ASR in Hindi.">Hindi</option><option value="Perform ASR. The speaker mixes Hindi and English; write what they say.">Hindi + English mix</option><option value="Perform ASR in the language the speaker uses.">Detect automatically</option><option value="">Custom (below)</option></select></div>
+        <div class="field full" data-field="asr_prompt"><label for="asr_prompt">Listening instruction</label>
+          <input id="asr_prompt" type="text" autocomplete="off"><div class="msg"></div></div>
+      </div>
+      <div class="card">
+        <label class="switch"><input id="always_look" type="checkbox"><span class="track"></span>
+          <span class="switch-text"><strong>Look at the screen with every message</strong><small>Slower, but I always know what you see. Off: I look only when you ask about the screen.</small></span></label>
+        <div class="grid2">
+          <div class="field" data-field="max_image_width"><label for="max_image_width">Screenshot width (pixels)</label>
+            <input id="max_image_width" type="number" min="256" max="4096" step="64"><div class="msg"></div></div>
+          <div class="field" data-field="coord_mode"><label for="coord_mode">How the model points at things</label>
+            <select id="coord_mode"><option value="norm1000">0-1000 grid (Qwen3-VL style)</option><option value="pixels">Pixels (Qwen2.5-VL style)</option></select><div class="msg"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SAFETY ========== -->
+    <section class="panel" id="panel-safety" role="tabpanel" data-panel="safety" hidden>
+      <h1>Safety</h1>
+      <p class="lead">You are always in charge. Computer control starts <strong>off</strong> every time I launch.</p>
+      <div class="card">
+        <div class="seg" role="radiogroup" aria-label="When to ask before acting">
+          <label><input type="radio" name="approvals" value="risky"><span><strong>Ask for risky things</strong><small>Pressing Enter (it may send or submit), opening links, reading or writing files, commands, connectors, system shortcuts, long typing. Clicks, scrolling and short typing go ahead without asking.</small></span></label>
+          <label><input type="radio" name="approvals" value="all"><span><strong>Ask for everything</strong><small>Every click, scroll, keystroke and tool call needs your Allow.</small></span></label>
+          <label class="full-opt"><input type="radio" name="approvals" value="full"><span><strong>Full access</strong><small>Never ask. I can run commands, change files, use your apps and call tools on my own.</small></span></label>
+        </div>
+        <div class="banner warn" id="full-banner" hidden><strong>Full access is on.</strong><span>I won't ask before acting. Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Space</kbd> any time to stop me.</span></div>
+      </div>
+      <div class="card tips">
+        <div><kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Space</kbd> stops me instantly from anywhere.</div>
+        <div><kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>C</kbd> opens the typing box. Double-click me for the same.</div>
+        <div>Moving the mouse yourself while I act takes control back.</div>
+        <div>Closing windows keeps me running in the tray. Right-click the tray icon to quit.</div>
+      </div>
+    </section>
+
+    <!-- ========== APPEARANCE ========== -->
+    <section class="panel" id="panel-appearance" role="tabpanel" data-panel="appearance" hidden>
+      <h1>Appearance</h1>
+      <p class="lead">Make this window comfortable. These apply instantly and only affect this window.</p>
+      <div class="card">
+        <div class="grid2">
+          <div class="field"><label for="ui-theme">Theme</label>
+            <select id="ui-theme"><option value="system">Match my system</option><option value="light">Light</option><option value="dark">Dark</option></select></div>
+          <div class="field"><label for="ui-density">Layout</label>
+            <select id="ui-density"><option value="compact">Compact</option><option value="comfortable">Comfortable</option></select></div>
+          <div class="field"><label for="ui-font">Font</label>
+            <select id="ui-font"><option value="system">System default</option><option value="segoe">Segoe UI</option><option value="verdana">Verdana (wide)</option><option value="serif">Georgia (serif)</option><option value="mono">Consolas (monospace)</option></select></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="size-head"><label for="ui-scale">View scale</label><output id="ui-scale-out" for="ui-scale">100%</output></div>
+        <input id="ui-scale" class="range" type="range" min="70" max="150" step="5" value="100">
+        <div class="presets"><button type="button" class="btn ghost" data-scale="85">Smaller</button><button type="button" class="btn ghost" data-scale="100">Normal</button><button type="button" class="btn ghost" data-scale="125">Larger</button><button type="button" class="btn ghost" id="ui-reset">Reset appearance</button></div>
+        <p class="hint">Tip: <kbd>Ctrl</kbd> + <kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd> also change the scale.</p>
+      </div>
+    </section>
+
+    <!-- ========== ADVANCED ========== -->
+    <section class="panel" id="panel-advanced" role="tabpanel" data-panel="advanced" hidden>
+      <h1>Advanced</h1>
+      <p class="lead">For tinkerers. The defaults work well for LFM3-Omni.</p>
+      <div class="card grid2">
+        <div class="field" data-field="gpu_layers"><label for="gpu_layers">GPU layers (99 = all, 0 = processor only)</label>
+          <input id="gpu_layers" type="number" min="0" max="999"><div class="msg"></div></div>
+        <div class="field" data-field="ctx"><label for="ctx">Memory size (tokens)</label>
+          <input id="ctx" type="number" min="512" step="1024"><div class="msg"></div></div>
+        <div class="field full" data-field="llama_args"><label for="llama_args">Extra llama-server options</label>
+          <input id="llama_args" type="text" autocomplete="off" spellcheck="false"><div class="msg"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Web connectors</h2><button class="btn ghost" id="add-hook">Add connector</button></div>
+        <p class="hint">Simple HTTP endpoints I can POST to. For anything richer, use an MCP server. I ask before first use.</p>
+        <div id="hooks"></div>
+      </div>
+      <div class="card row wrap">
+        <button class="btn" id="btn-logs">Open log folder</button>
+        <span class="spacer"></span>
+        <button class="btn danger" id="btn-quit">Quit Companion</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="savebar" id="savebar">
+    <div class="save-info" id="save-info" role="status" aria-live="polite">All changes saved</div>
+    <button class="btn ghost" id="btn-revert" disabled>Revert</button>
+    <button class="btn primary" id="btn-save" disabled title="Model changes reload my brain; everything else applies straight away">Save</button>
+  </footer>
+</div>
+
+<dialog id="full-dialog" aria-labelledby="full-title">
+  <form method="dialog">
+    <h2 id="full-title">Turn on full access?</h2>
+    <p>With full access I will <strong>stop asking</strong> before I act. I can run commands, create and change files, use your mouse and keyboard, call MCP tools and read web pages by myself.</p>
+    <p>A mistake, or a malicious web page or file that tricks me, could cause real damage to your files or accounts. Only continue if you trust this setup.</p>
+    <p class="hint">You'll only see this warning once. Computer control (the hand button) still starts off each time, and <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Space</kbd> always stops me.</p>
+    <div class="dialog-actions">
+      <button class="btn" value="cancel" id="full-cancel">Cancel</button>
+      <button class="btn danger-solid" value="ok" id="full-ok">I understand, turn on</button>
+    </div>
+  </form>
+</dialog>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="characters.js"></script>
+<script src="settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+name: Build Companion
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Unit tests
+        working-directory: src-tauri
+        run: cargo test
+
+  bundle:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # The llama.cpp version is pinned in llama.cpp.version and verified against llama.cpp.sha256.
+      # To upgrade: change both files in one commit (see README, "Updating llama.cpp").
+      - name: Show pinned llama.cpp version
+        shell: pwsh
+        run: |
+          "llama.cpp pinned to $((Get-Content llama.cpp.version -Raw).Trim())"
+      - name: Fetch pinned llama.cpp (Vulkan, Windows x64)
+        shell: pwsh
+        run: ./scripts/fetch-llama.ps1 -Force
+
+      - run: npm ci
+      - name: Build installer (llama.cpp is bundled as an app resource)
+        run: npx tauri build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: companion-windows
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+
+  release:
+    # Runs only for version tags (git tag v0.1.0 && git push --tags); publishes every installer to a GitHub Release.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: companion-windows
+          path: dist
+      - name: Write checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS.txt
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Companion $GITHUB_REF_NAME" --generate-notes

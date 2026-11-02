@@ -1,0 +1,166 @@
+/* Flat, quiet chrome around a lively character: solid fills, 1px borders, no gradients, no blur. */
+:root {
+  --paper: #ffffff; --paper-2: #f3f4f6; --edge: #d5d8de; --ink: #1d2026; --ink-2: #5b616c;
+  --bar: #272a31; --bar-ink: #eceef2; --bar-mute: #a3aab6;
+  --accent: #3d6fd8; --ok: #2f9d6a; --danger: #d8485b; --warn-bg: #fff6df; --warn-edge: #ecd69a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #23262d; --paper-2: #2b2f38; --edge: #3b404b; --ink: #eceef2; --ink-2: #a9b0bc;
+    --warn-bg: #3a3118; --warn-edge: #6b5a24; --accent: #7da2ff;
+  }
+  ::-webkit-scrollbar-thumb { background: #4a505c; }
+  .ask-clock { background: rgba(255,255,255,.14); }
+  .ask-row button.yes { color: #0c1a13; }
+}
+* { box-sizing: border-box; margin: 0; scrollbar-width: thin; scrollbar-color: #c3c7cf transparent; }
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c3c7cf; border-radius: 999px; }
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: transparent; user-select: none; -webkit-user-select: none;
+  font: 13px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+}
+
+/* Only the character scales (--pet = size/100). Bubbles, controls and text stay the same size at every setting. */
+:root { --pet: 0.8; --card-side: max(8px, calc(50% - 122px)); }
+#petbox { position: absolute; left: 50%; bottom: 46px; width: calc(200px * var(--pet)); height: calc(240px * var(--pet)); margin-left: calc(-100px * var(--pet)); cursor: grab; }
+#petbox:active { cursor: grabbing; }
+#pet { width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+
+/* speech, thought, approval: one flat card style */
+#bubble, #thought, #ask {
+  position: absolute; left: var(--card-side); right: var(--card-side); top: 6px; max-height: 104px;
+  padding: 8px 12px; border-radius: 12px 12px 12px 3px;
+  background: var(--paper); border: 1px solid var(--edge); box-shadow: 0 1px 2px rgba(0,0,0,.14);
+  transition: opacity .18s ease, transform .18s ease;
+}
+#bubble { overflow-y: auto; }
+#bubble.hidden, #thought.hidden { opacity: 0; transform: translateY(4px); pointer-events: none; }
+#bubble.notice { background: var(--warn-bg); border-color: var(--warn-edge); }
+#bubble .caret { display: none; width: 2px; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--ink-2); animation: blink 1s steps(2) infinite; }
+#bubble.typing .caret { display: inline-block; }
+@keyframes blink { 50% { opacity: 0; } }
+
+#thought { display: flex; align-items: center; gap: 10px; background: var(--paper-2); border-radius: 14px; max-width: 220px; right: auto; }
+#thought::after { content: ""; position: absolute; left: 22px; bottom: -9px; width: 9px; height: 9px; border-radius: 50%; background: var(--paper-2); border: 1px solid var(--edge); }
+#thought::before { content: ""; position: absolute; left: 32px; bottom: -17px; width: 5px; height: 5px; border-radius: 50%; background: var(--paper-2); border: 1px solid var(--edge); }
+.dots { display: flex; gap: 4px; flex: none; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-2); animation: dot 1.2s ease-in-out infinite; }
+.dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes dot { 0%, 60%, 100% { transform: translateY(0); opacity: .35; } 30% { transform: translateY(-4px); opacity: 1; } }
+.tcol { display: flex; flex-direction: column; min-width: 0; }
+#thought-label { font-weight: 600; color: var(--ink); }
+#thought-text { color: var(--ink-2); font-size: 12px; max-height: 3.4em; overflow: hidden; }
+#thought-text:empty { display: none; }
+
+.trow { display: flex; align-items: baseline; gap: 6px; }
+#thought-time { font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+#thought-time:empty { display: none; }
+/* a thin moving line along the bottom: "still working" */
+.tline { position: absolute; left: 10px; right: 10px; bottom: 3px; height: 2px; border-radius: 2px; overflow: hidden; }
+.tline::before { content: ""; position: absolute; top: 0; bottom: 0; width: 30%; border-radius: inherit; background: var(--accent); animation: slide 1.3s ease-in-out infinite; }
+@keyframes slide { from { left: -30%; } to { left: 100%; } }
+
+/* background task pill */
+#task {
+  position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 7px; max-width: 244px; padding: 4px 10px 4px 8px;
+  border-radius: 999px; background: var(--bar); color: var(--bar-ink); border: 1px solid #3a3e47;
+  font-size: 11.5px; font-weight: 600; white-space: nowrap; pointer-events: none; z-index: 5;
+  transition: opacity .18s ease;
+}
+#task.hidden, body.hot #task, body.chatting #task { opacity: 0; }
+#task-text { overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+#task .spin { width: 11px; height: 11px; flex: none; border-radius: 50%; border: 2px solid #8ab4ff; border-top-color: transparent; animation: spin .8s linear infinite; }
+#task .tbar { display: none; width: 46px; height: 4px; flex: none; border-radius: 4px; background: #3a3e47; overflow: hidden; }
+#task.pct .tbar { display: block; }
+#task .tbar i { display: block; height: 100%; width: 0; background: #8ab4ff; transition: width .3s ease; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* little flat effects: hearts when petted, sparks when happy, notes when humming */
+.fx { position: absolute; pointer-events: none; z-index: 4; animation: rise 1.5s ease-out forwards; }
+.fx.heart { width: 11px; height: 11px; background: #ff6f8f; transform: rotate(45deg); }
+.fx.heart::before, .fx.heart::after { content: ""; position: absolute; width: 11px; height: 11px; border-radius: 50%; background: inherit; }
+.fx.heart::before { left: -5.5px; } .fx.heart::after { top: -5.5px; }
+.fx.spark { width: 7px; height: 7px; border-radius: 2px; }
+.fx.note { font: 700 16px/1 "Segoe UI Symbol", system-ui, sans-serif; color: #7a6fd0; }
+.fx.bang { font: 800 18px/1 system-ui, sans-serif; color: #e0892c; }
+@keyframes rise {
+  0% { translate: 0 0; opacity: 0; scale: .6; }
+  15% { opacity: 1; scale: 1; }
+  100% { translate: var(--dx, 0) -70px; opacity: 0; scale: .9; }
+}
+
+#ask { background: var(--warn-bg); border-color: var(--warn-edge); z-index: 7; max-height: none; border-radius: 12px; }
+#ask.hidden { display: none; }
+#ask-text { font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 130px; overflow-y: auto; }
+.ask-clock { height: 3px; margin-top: 8px; border-radius: 3px; background: rgba(0,0,0,.1); overflow: hidden; }
+.ask-clock i { display: block; height: 100%; width: 100%; background: var(--accent); }
+.ask-keys { margin-top: 6px; font-size: 11px; color: var(--ink-2); }
+.ask-keys kbd { font: 600 10px/1 inherit; padding: 1px 4px; border: 1px solid var(--edge); border-radius: 4px; background: var(--paper); }
+#ask:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ask-row { display: flex; gap: 8px; margin-top: 10px; }
+.ask-row button { flex: 1; min-height: 30px; border: 1px solid var(--edge); border-radius: 8px; background: var(--paper); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; transition: background .12s; }
+.ask-row button:hover { background: var(--paper-2); }
+.ask-row button.yes { background: var(--ok); border-color: var(--ok); color: #fff; }
+.ask-row button.yes:hover { background: #28885b; }
+
+/* typed chat */
+#chat { position: absolute; left: var(--card-side); right: var(--card-side); bottom: 4px; display: flex; gap: 6px; padding: 4px; border-radius: 10px; background: var(--paper); border: 1px solid var(--edge); box-shadow: 0 1px 2px rgba(0,0,0,.14); z-index: 8; }
+#chat.hidden { display: none; }
+#chat input { flex: 1; min-width: 0; height: 30px; padding: 0 8px; border: 0; background: transparent; font: inherit; color: var(--ink); outline: none; user-select: text; -webkit-user-select: text; }
+#chat button { width: 30px; height: 30px; border: 0; border-radius: 7px; background: var(--accent); color: #fff; display: grid; place-items: center; cursor: pointer; }
+#chat button svg { width: 15px; height: 15px; fill: currentColor; }
+
+/* controls */
+#bar {
+  position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%) translateY(3px);
+  display: flex; gap: 1px; padding: 3px; border-radius: 12px;
+  background: var(--bar); border: 1px solid #3a3e47;
+  opacity: 0; transition: opacity .15s ease, transform .15s ease; z-index: 6;
+}
+body.hot #bar, #bar:focus-within { opacity: 1; transform: translateX(-50%); }
+body.chatting #bar { display: none; }
+#bar button {
+  width: 34px; height: 34px; border: 0; border-radius: 8px; padding: 0;
+  display: grid; place-items: center; background: transparent; color: var(--bar-ink); cursor: pointer;
+  transition: background .12s, color .12s;
+}
+#bar button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#bar button .slash { display: none; stroke: #ff8c9b; }
+#bar button.off { color: var(--bar-mute); }
+#bar button.off .slash { display: block; }
+#bar button:hover { background: #3a3e47; }
+#bar button.on-hands { background: var(--danger); color: #fff; }
+#bar button.on-hands svg { fill: currentColor; }
+#b-stop:hover { color: #ff8c9b; }
+button:focus-visible, #chat input:focus-visible { outline: 2px solid #8ab4ff; outline-offset: 1px; }
+
+/* listening badge by my head (UI-sized, it doesn't grow with the character) */
+#ear { position: absolute; right: 2px; top: 6px; height: 18px; min-width: 18px; padding: 0 5px; display: flex; align-items: center; justify-content: center; gap: 2px;
+  border-radius: 999px; background: var(--ok); opacity: 0; transform: scale(.7); pointer-events: none; z-index: 3;
+  transition: opacity .2s ease, transform .2s ease; }
+#ear i { width: 3px; height: 4px; border-radius: 2px; background: #fff; transition: height .08s linear; }
+#ear[data-state="ready"] { opacity: .55; transform: scale(.55); animation: breathe 2.8s ease-in-out infinite; }
+#ear[data-state="ready"] i:not(:nth-child(2)) { display: none; }
+#ear[data-state="hearing"] { opacity: 1; transform: scale(1); }
+#ear[data-state="hearing"] i:nth-child(1) { height: calc(4px + 10px * var(--lv, .3) * .7); }
+#ear[data-state="hearing"] i:nth-child(2) { height: calc(4px + 10px * var(--lv, .3)); }
+#ear[data-state="hearing"] i:nth-child(3) { height: calc(4px + 10px * var(--lv, .3) * .5); }
+@keyframes breathe { 50% { opacity: .25; } }
+#b-mic.live { color: var(--ok); }
+
+/* push to talk: a ring around the character while the key is held */
+body.ptt #petbox::after { content: ""; position: absolute; inset: 14px 22px 0; border-radius: 50%; border: 3px solid var(--ok); opacity: .8; pointer-events: none; animation: ring 1s ease-in-out infinite; }
+@keyframes ring { 50% { transform: scale(1.05); opacity: .35; } }
+
+@media (prefers-reduced-motion: reduce) {
+  #ear[data-state="ready"] { animation: none; }
+  body.ptt #petbox::after { animation: none; }
+  #bubble, #thought, #ask, #bar { transition: none; }
+  .dots i, #bubble .caret, .tline::before { animation: none; }
+  .fx { display: none; }
+}

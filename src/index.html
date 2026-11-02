@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Companion</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- What I'm saying (streams in as I reply) -->
+  <div id="bubble" class="hidden" role="status" aria-live="polite"><span id="bubble-text"></span><i class="caret" aria-hidden="true"></i></div>
+
+  <!-- What I'm doing while I think -->
+  <div id="thought" class="hidden" role="status" aria-live="polite">
+    <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="tcol"><span class="trow"><span id="thought-label">Thinking</span><span id="thought-time"></span></span><span id="thought-text"></span></div>
+    <i class="tline" aria-hidden="true"></i>
+  </div>
+
+  <!-- Slow work in the background (waking up, downloading, connecting tools): always visible, never silent -->
+  <div id="task" class="hidden" role="status" aria-live="polite">
+    <i class="spin" aria-hidden="true"></i>
+    <span id="task-text"></span>
+    <span class="tbar" aria-hidden="true"><i id="task-fill"></i></span>
+  </div>
+
+  <div id="ask" class="hidden" role="alertdialog" aria-labelledby="ask-text">
+    <div id="ask-text"></div>
+    <div class="ask-clock" aria-hidden="true"><i id="ask-fill"></i></div>
+    <div class="ask-row">
+      <button id="ask-yes" class="yes">Allow</button>
+      <button id="ask-no">No</button>
+    </div>
+    <div class="ask-keys">Focus this card, then <kbd>Enter</kbd> allows and <kbd>Esc</kbd> says no. No answer counts as no.</div>
+  </div>
+
+  <!-- Drag handle: the drag script ignores SVG elements, so it lives on this HTML wrapper ("deep" = whole subtree). -->
+  <div id="petbox" data-tauri-drag-region="deep">
+    <svg id="pet" viewBox="0 0 200 240" role="img" aria-label="Your companion"></svg>
+    <!-- Shows that I'm listening: a soft dot while I wait for you, moving bars while I hear you speak. -->
+    <div id="ear" data-state="off" title="" aria-hidden="true"><i></i><i></i><i></i></div>
+  </div>
+
+  <form id="chat" class="hidden" autocomplete="off">
+    <input id="chat-input" type="text" maxlength="2000" placeholder="Type to me..." aria-label="Message">
+    <button type="submit" id="chat-send" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 17-3-7z"/></svg></button>
+  </form>
+
+  <div id="bar" role="toolbar" aria-label="Companion controls">
+    <button id="b-mic" title="Microphone" aria-label="Microphone" aria-pressed="true">
+      <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/><path class="slash" d="M4 4l16 16"/></svg>
+    </button>
+    <button id="b-screen" title="Let me see the screen" aria-label="Screen viewing" aria-pressed="true">
+      <svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M4 4l16 16"/></svg>
+    </button>
+    <button id="b-hands" title="Let me use mouse, keyboard and files" aria-label="Computer control" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 2 3 6-3 1.5-3-6-5 4z"/></svg>
+    </button>
+    <button id="b-chat" title="Type to me (Ctrl+Alt+C)" aria-label="Type a message">
+      <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>
+    </button>
+    <button id="b-stop" title="Stop everything (Ctrl+Alt+Space)" aria-label="Stop everything">
+      <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>
+    </button>
+    <button id="b-key" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.6a7 7 0 0 0-2 1.2l-2.3-.9-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 2 1.2L10 21h4l.6-2.6a7 7 0 0 0 2-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg>
+    </button>
+    <button id="b-hide" title="Hide to the tray (right-click the tray icon to quit)" aria-label="Hide to tray">
+      <svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+    </button>
+  </div>
+
+  <script src="characters.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

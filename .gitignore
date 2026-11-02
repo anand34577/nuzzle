@@ -1,0 +1,6 @@
+node_modules
+src-tauri/target
+src-tauri/gen
+*.log
+src-tauri/resources/llama/*
+!src-tauri/resources/llama/README.txt

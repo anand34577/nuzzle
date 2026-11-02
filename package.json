@@ -1,0 +1,13 @@
+{
+  "name": "companion",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "fetch:llama": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-llama.ps1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
