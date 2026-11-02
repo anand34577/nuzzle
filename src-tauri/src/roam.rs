@@ -78,6 +78,8 @@ fn run(core: Arc<Core>) {
     let mut next_dodge = Instant::now();
     let mut last_dodge_line = Instant::now() - Duration::from_secs(120);
     let mut dodging = false;
+    let mut last_cursor = (0.0, 0.0);
+    let mut cursor_moved = Instant::now() - Duration::from_secs(60);
 
     loop {
         sleep(Duration::from_millis(33));
@@ -146,6 +148,15 @@ fn run(core: Arc<Core>) {
         };
         let now = Instant::now();
         let cursor = core.app.cursor_position().ok().map(|c| (c.x, c.y));
+        if let Some(c) = cursor {
+            if (c.0 - last_cursor.0).abs() > 4.0 || (c.1 - last_cursor.1).abs() > 4.0 {
+                last_cursor = c;
+                cursor_moved = now;
+            }
+        }
+        let typing = avoid::is_typing(avoid::input_idle(), now.saturating_duration_since(cursor_moved));
+        // While the pointer is on the move, or the user is typing, don't pick spots near their work or the pointer.
+        let pointer_busy = now.saturating_duration_since(cursor_moved) < Duration::from_millis(3000) || typing;
         if !avoid_on {
             zones.clear();
             dodging = false;
@@ -156,9 +167,15 @@ fn run(core: Arc<Core>) {
                 zones.push(avoid::caret_zone(c, sf));
             }
             if let Some(z) = avoid::click_zone(*core.click_spot.lk(), sf, now) {
-                zones.push(z);
+                zones.push(if typing { z.inflate(60.0 * sf, 30.0 * sf) } else { z });
             }
         }
+        // Where I may choose to stand: clear of what the user is working on, and of the pointer while it is busy.
+        let personal = cursor.filter(|_| avoid_on && pointer_busy).map(|c| avoid::personal_space(c, sf));
+        let wide = |tx: f64, ty: f64| {
+            let me = pet_at(tx, ty);
+            !zones.iter().any(|z| me.overlaps(&z.inflate(100.0 * sf, 60.0 * sf))) && !personal.is_some_and(|p| me.overlaps(&p))
+        };
         // The pointer resting on me (not petting or poking: those move or press) means they want what is behind me.
         let touched = now_ms().saturating_sub(core.last_pet_touch.load(std::sync::atomic::Ordering::Relaxed)) < 10_000;
         let rest = match (avoid_on, cursor) {
@@ -215,7 +232,7 @@ fn run(core: Arc<Core>) {
                 // A few tries for a spot on this edge that isn't on top of what the user is working on.
                 let tx = (0..6)
                     .map(|_| rng.random_range(lo.min(hi)..=hi.max(lo)) as f64)
-                    .find(|&tx| !zones.iter().any(|z| pet_at(tx, ty).overlaps(z)));
+                    .find(|&tx| wide(tx, ty));
                 match tx {
                     Some(tx) => {
                         feet_y = Some(p.y);
@@ -225,20 +242,9 @@ fn run(core: Arc<Core>) {
                 }
             } else {
                 feet_y = None;
-                // Now and then, hop to a spot near the pointer (beside it, never on it): good company.
-                let near = cursor.filter(|_| avoid_on && rng.random_bool(0.25)).map(|c| {
-                    let off = pet_at(0.0, 0.0);
-                    let gap = 80.0 * sf;
-                    let left_of = c.0 - gap - off.r; // window x with my right edge `gap` left of the pointer
-                    let right_of = c.0 + gap - off.l;
-                    if rng.random_bool(0.5) { left_of } else { right_of }
-                });
-                let pick = near.map(|x| x.clamp(min_x, max_x)).filter(|&tx| !zones.iter().any(|z| pet_at(tx, ground_y).overlaps(z)));
-                let tx = pick.or_else(|| {
-                    (0..8)
-                        .map(|_| rng.random_range(min_x..=max_x.max(min_x + 1.0)))
-                        .find(|&tx| !zones.iter().any(|z| pet_at(tx, ground_y).overlaps(z)))
-                });
+                let tx = (0..10)
+                    .map(|_| rng.random_range(min_x..=max_x.max(min_x + 1.0)))
+                    .find(|&tx| wide(tx, ground_y));
                 match tx {
                     Some(tx) => dest = Some((tx, ground_y)),
                     None => next_decision = Instant::now() + Duration::from_secs(3),

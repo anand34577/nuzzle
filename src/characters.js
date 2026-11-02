@@ -180,7 +180,7 @@ function characterSvg(id, { forPreview = false } = {}) {
           <circle id="bulb" cx="108" cy="46" r="8" fill="${c.antenna.bulb}"/>
         </g>` : '';
   const eye = (side, cx) => `
-          <g id="eye${side}" transform="translate(${cx} 140)"><ellipse rx="14" ry="18" fill="#fff"/><circle id="pup${side}" r="8" fill="${c.eye}"/><circle id="hi${side}" cx="3" cy="-3.5" r="2.8" fill="#fff"/></g>
+          <g id="eye${side}" transform="translate(${cx} 140)"><ellipse rx="14" ry="18" fill="#fff"/><circle id="pup${side}" r="8" fill="${c.eye}"/><circle id="hi${side}" cx="3" cy="-3.5" r="3.4" fill="#fff"/><circle id="lo${side}" cx="-3" cy="3.5" r="1.6" fill="#fff" opacity=".85"/></g>
           <path id="happy${side}" d="M${cx - 12} 142 Q${cx} 126 ${cx + 12} 142" stroke="${c.eye}" stroke-width="4" fill="none" stroke-linecap="round" display="none"/>
           <path id="dizzy${side}" d="M0 0 m-2 0 a2 2 0 1 1 4 0 a4 4 0 1 1 -8 0 a6 6 0 1 1 12 0 a8 8 0 1 1 -16 0" transform="translate(${cx} 140)" stroke="${c.eye}" stroke-width="2.6" fill="none" stroke-linecap="round" display="none"/>
           <path id="brow${side}" d="M${cx - 11} 114 Q${cx} 109 ${cx + 11} 114" stroke="${c.eye}" stroke-width="3.4" fill="none" stroke-linecap="round" display="none"/>`;

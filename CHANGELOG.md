@@ -2,6 +2,12 @@
 
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.1] - 2026-11-02
+
+### Changed
+- Cuter and livelier: shinier eyes, a gentle idle bounce, a happy squish when the pointer comes over the character, dust puffs on landing, star-shaped sparkles, and speech bubbles that pop in.
+- Staying out of the way: the character no longer hops to a spot beside the pointer. While the pointer is moving, or you are typing, he picks places to stand well away from it and from your text. He never runs from a pointer that comes to him, so he can still be petted, poked and dragged.
+
 ## [0.1.0] - 2026-11-02
 
 ### Added

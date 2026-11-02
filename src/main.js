@@ -22,7 +22,7 @@ const S = {
   thinking: false, thinkStart: 0, replying: false, asking: false, chatting: false,
   dragged: false, sleeping: false, gentleWake: false,
   lastActive: performance.now(), lastMove: performance.now(), activeSince: performance.now(),
-  wave: -1e9, startle: -1e9, poke: -1e9, happyUntil: 0,
+  wave: -1e9, startle: -1e9, poke: -1e9, happyUntil: 0, hoverUntil: 0, nextHover: 0,
   // moods and reactions (each lasts until the given time)
   curiousUntil: 0, sleepyUntil: 0,       // moods the reply asked for ([curious], [sleepy])
   pettedUntil: 0, dizzyUntil: 0, grumpyUntil: 0, sadUntil: 0, squintUntil: 0, crossUntil: 0, surpriseUntil: 0,
@@ -154,7 +154,7 @@ function burst(kind, n = 1, { spread = 0.4, y = 0.22 } = {}) {
     el.className = 'fx ' + kind;
     if (kind === 'note') el.textContent = pick(['♪', '♫']);
     if (kind === 'bang') el.textContent = '!';
-    if (kind === 'spark') el.style.background = pick(colors);
+    if (kind === 'spark') { el.style.background = pick(colors); el.classList.add('star'); }
     el.style.left = (r.left + r.width * (0.5 + (Math.random() - 0.5) * spread)) + 'px';
     el.style.top = (r.top + r.height * y + rand(-6, 6)) + 'px';
     el.style.setProperty('--dx', rand(-34, 34).toFixed(0) + 'px');
@@ -240,6 +240,15 @@ function flashBar(ms) {                          // show the control bar for a w
   if (ms) barTimer = setTimeout(() => document.body.classList.remove('hot'), ms);
 }
 for (const el of [$('petbox'), $('bar')]) el.addEventListener('mouseenter', () => flashBar(0));
+// Glad to be noticed: the pointer coming over me gets a happy squish, and now and then a heart.
+$('petbox').addEventListener('mouseenter', () => {
+  const n = performance.now();
+  S.hoverUntil = n + 1600;
+  if (n < S.nextHover || S.sleeping || S.dragged) return;
+  S.nextHover = n + 6000;
+  wake(); sp.squash.kick(-4);
+  if (Math.random() < 0.5) burst('heart', 1);
+});
 document.documentElement.addEventListener('mouseleave', () => flashBar(1500));
 
 function renderFlags() {
@@ -665,7 +674,8 @@ function frame(now) {
   const grumpy = now < S.grumpyUntil;
   const sad = now < S.sadUntil && !grumpy;
   const pettedNow = now < S.pettedUntil;
-  const happy = now < S.happyUntil || pettedNow;
+  const hovered = now < S.hoverUntil;
+  const happy = now < S.happyUntil || pettedNow || (hovered && !busy);
   const startled = now - S.startle < 700;
   const curious = now < S.curiousUntil, sleepyMood = now < S.sleepyUntil;
   const surprised = now < S.surpriseUntil;
@@ -680,7 +690,7 @@ function frame(now) {
   wasSleeping = sleeping;
   if (!yawnedForSleep && idleFor > sleepAfter - 14000 && !sleeping && !S.quirk && !busy) { S.quirk = { name: 'yawn', start: now, dur: 2300 }; yawnedForSleep = true; }
   if (S.hop && !prevHop) sp.squash.kick(6);                         // spring off the ground
-  if (!S.hop && prevHop) sp.squash.kick(-8);                        // land with a squash
+  if (!S.hop && prevHop) { sp.squash.kick(-8); burst('puff', 2, { spread: 0.5, y: 0.93 }); }   // land with a squash and a puff of dust
   prevHop = S.hop;
   if (S.walking !== prevWalking) { sp.lean.kick(S.walking ? S.dir * 40 : -S.dir * 30); prevWalking = S.walking; }
 
@@ -791,6 +801,9 @@ function frame(now) {
     set('footL', { cy: 220 }); set('footR', { cy: 220 });
     if (tr.float) bob += Math.sin(t * 1.8) * 3 - 3;
   }
+  if (!S.walking && !S.dragged && !sleeping && !sitting && !tr.float) bob -= (Math.sin(t * 3.1) * 0.5 + 0.5) * 1.6 * (tr.bounce || 1);   // alive even when idle
+  if (happy && !S.walking && !S.dragged) { tilt += Math.sin(t * 9) * 2.5; bob -= Math.abs(Math.sin(t * 6)) * 3; }               // happy little wiggle-bounce
+  if (hovered && !busy && !S.walking && !sleeping) { tilt += Math.sin(t * 7) * 2; bob -= Math.abs(Math.sin(t * 5)) * 2; }       // glad to see you
   if (listening) { tilt += Math.sin(t * 5) * 3; bob += Math.sin(t * 10) * 1.5; }                // nodding along
   if (speaking) { bob -= Math.abs(Math.sin(t * 8)) * 3 * Math.min(1, S.out * 9); tilt += Math.sin(t * 3.1) * 2 * (tr.sway || 1); }
   if (S.thinking && !speaking) tilt += Math.sin(t * 2) * 4 - 3;                                  // head-tilt ponder
@@ -828,6 +841,7 @@ function frame(now) {
     const r = surprised || startled ? 6.5 : happy ? 8.6 : 8;                                    // pupils shrink in surprise
     set(p, { cx: px.toFixed(2), cy: py.toFixed(2), r, opacity: dizzy ? 0 : 1 });
     set(h, { cx: (px + 3).toFixed(2), cy: (py - 3.5).toFixed(2), opacity: dizzy ? 0 : 1 });
+    set(side === 1 ? 'loL' : 'loR', { cx: (px - 3).toFixed(2), cy: (py + 3.5).toFixed(2), opacity: dizzy ? 0 : 0.85 });
   }
   for (const id of ['dizzyL', 'dizzyR']) {
     const cx = id === 'dizzyL' ? 74 : 126;

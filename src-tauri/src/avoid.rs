@@ -132,6 +132,36 @@ pub fn caret_rect() -> Option<Rect> {
     None
 }
 
+/// How long since the last keyboard or mouse input anywhere in the system. Only the timestamp is read, never which
+/// keys were pressed.
+#[cfg(windows)]
+pub fn input_idle() -> Option<Duration> {
+    use windows_sys::Win32::{
+        System::SystemInformation::GetTickCount,
+        UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO},
+    };
+    unsafe {
+        let mut info = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
+        (GetLastInputInfo(&mut info) != 0).then(|| Duration::from_millis(u64::from(GetTickCount().wrapping_sub(info.dwTime))))
+    }
+}
+
+#[cfg(not(windows))]
+pub fn input_idle() -> Option<Duration> {
+    None
+}
+
+/// Typing (or at least keyboard-driven work): the user is active, but the pointer has been still for a moment.
+pub fn is_typing(input_idle: Option<Duration>, pointer_still: Duration) -> bool {
+    input_idle.is_some_and(|i| i < Duration::from_millis(2500)) && pointer_still > Duration::from_millis(1500)
+}
+
+/// The area around the pointer the companion should not choose to stand in while the user is moving it about or
+/// working beside it. It only steers where he walks to: he never runs away from a pointer that comes to him.
+pub fn personal_space(pointer: (f64, f64), sf: f64) -> Rect {
+    Rect::around(pointer.0, pointer.1, 260.0 * sf, 190.0 * sf)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,6 +233,26 @@ mod tests {
         assert!(click_zone(None, 1.0, t0).is_none());
         let c = caret_zone(r(300.0, 200.0, 302.0, 220.0), 1.0);
         assert!(c.l < 300.0 && c.r > 302.0 && c.t < 200.0 && c.b > 220.0);
+    }
+
+    #[test]
+    fn typing_means_recent_input_with_a_still_pointer() {
+        let (recent, long, still) = (Some(Duration::from_millis(400)), Some(Duration::from_secs(30)), Duration::from_secs(3));
+        assert!(is_typing(recent, still));
+        assert!(!is_typing(recent, Duration::from_millis(300))); // the pointer is moving: not typing
+        assert!(!is_typing(long, still)); // nothing pressed lately
+        assert!(!is_typing(None, still));
+    }
+
+    #[test]
+    fn personal_space_surrounds_the_pointer() {
+        let z = personal_space((500.0, 400.0), 1.0);
+        assert!(z.contains(500.0, 400.0) && z.contains(700.0, 500.0) && !z.contains(900.0, 400.0));
+    }
+
+    #[test]
+    fn input_idle_never_panics() {
+        let _ = input_idle();
     }
 
     #[test]

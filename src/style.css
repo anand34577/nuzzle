@@ -33,24 +33,26 @@ html, body {
 /* speech, thought, approval: one flat card style */
 #bubble, #thought, #ask {
   position: absolute; left: var(--card-side); right: var(--card-side); top: 6px; max-height: 104px;
-  padding: 8px 12px; border-radius: 12px 12px 12px 3px;
-  background: var(--paper); border: 1px solid var(--edge); box-shadow: 0 1px 2px rgba(0,0,0,.14);
-  transition: opacity .18s ease, transform .18s ease;
+  padding: 8px 14px; border-radius: 18px 18px 18px 4px;
+  background: var(--paper); border: 1px solid var(--edge); box-shadow: 0 2px 6px rgba(0,0,0,.14);
+  transform-origin: 16% 100%;
+  transition: opacity .18s ease, transform .32s cubic-bezier(.34, 1.56, .64, 1);   /* a little overshoot: pops in like a bubble */
 }
 #bubble { overflow-y: auto; }
-#bubble.hidden, #thought.hidden { opacity: 0; transform: translateY(4px); pointer-events: none; }
+#bubble.hidden, #thought.hidden { opacity: 0; transform: translateY(8px) scale(.82); pointer-events: none; }
 #bubble.notice { background: var(--warn-bg); border-color: var(--warn-edge); }
 #bubble .caret { display: none; width: 2px; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--ink-2); animation: blink 1s steps(2) infinite; }
 #bubble.typing .caret { display: inline-block; }
 @keyframes blink { 50% { opacity: 0; } }
 
-#thought { display: flex; align-items: center; gap: 10px; background: var(--paper-2); border-radius: 14px; max-width: 220px; right: auto; }
+#thought { display: flex; align-items: center; gap: 10px; background: var(--paper-2); border-radius: 18px; max-width: 220px; right: auto; }
 #thought::after { content: ""; position: absolute; left: 22px; bottom: -9px; width: 9px; height: 9px; border-radius: 50%; background: var(--paper-2); border: 1px solid var(--edge); }
 #thought::before { content: ""; position: absolute; left: 32px; bottom: -17px; width: 5px; height: 5px; border-radius: 50%; background: var(--paper-2); border: 1px solid var(--edge); }
 .dots { display: flex; gap: 4px; flex: none; }
 .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-2); animation: dot 1.2s ease-in-out infinite; }
-.dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; }
-@keyframes dot { 0%, 60%, 100% { transform: translateY(0); opacity: .35; } 30% { transform: translateY(-4px); opacity: 1; } }
+.dots i:nth-child(2) { animation-delay: .15s; }
+.dots i { background: var(--accent); } .dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes dot { 0%, 60%, 100% { transform: translateY(0) scale(1); opacity: .35; } 30% { transform: translateY(-5px) scale(1.25); opacity: 1; } }
 .tcol { display: flex; flex-direction: column; min-width: 0; }
 #thought-label { font-weight: 600; color: var(--ink); }
 #thought-text { color: var(--ink-2); font-size: 12px; max-height: 3.4em; overflow: hidden; }
@@ -82,19 +84,23 @@ html, body {
 
 /* little flat effects: hearts when petted, sparks when happy, notes when humming */
 .fx { position: absolute; pointer-events: none; z-index: 4; animation: rise 1.5s ease-out forwards; }
-.fx.heart { width: 11px; height: 11px; background: #ff6f8f; transform: rotate(45deg); }
-.fx.heart::before, .fx.heart::after { content: ""; position: absolute; width: 11px; height: 11px; border-radius: 50%; background: inherit; }
-.fx.heart::before { left: -5.5px; } .fx.heart::after { top: -5.5px; }
+.fx.heart { width: 13px; height: 13px; background: #ff6f8f; transform: rotate(45deg); }
+.fx.heart::before, .fx.heart::after { content: ""; position: absolute; width: 13px; height: 13px; border-radius: 50%; background: inherit; }
+.fx.heart::before { left: -6.5px; } .fx.heart::after { top: -6.5px; }
 .fx.spark { width: 7px; height: 7px; border-radius: 2px; }
+.fx.spark.star { width: 11px; height: 11px; border-radius: 0; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); }
+/* a soft puff of dust where I land */
+.fx.puff { width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,.85); box-shadow: 0 0 0 1px rgba(0,0,0,.06); animation: puff .6s ease-out forwards; }
+@keyframes puff { 0% { translate: 0 0; opacity: .9; scale: .4; } 100% { translate: var(--dx, 0) -8px; opacity: 0; scale: 1.5; } }
 .fx.note { font: 700 16px/1 "Segoe UI Symbol", system-ui, sans-serif; color: #7a6fd0; }
 .fx.bang { font: 800 18px/1 system-ui, sans-serif; color: #e0892c; }
 @keyframes rise {
-  0% { translate: 0 0; opacity: 0; scale: .6; }
-  15% { opacity: 1; scale: 1; }
+  0% { translate: 0 0; opacity: 0; scale: .5; }
+  15% { opacity: 1; scale: 1.15; }
   100% { translate: var(--dx, 0) -70px; opacity: 0; scale: .9; }
 }
 
-#ask { background: var(--warn-bg); border-color: var(--warn-edge); z-index: 7; max-height: none; border-radius: 12px; }
+#ask { background: var(--warn-bg); border-color: var(--warn-edge); z-index: 7; max-height: none; border-radius: 16px; }
 #ask.hidden { display: none; }
 #ask-text { font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 130px; overflow-y: auto; }
 .ask-clock { height: 3px; margin-top: 8px; border-radius: 3px; background: rgba(0,0,0,.1); overflow: hidden; }
@@ -163,4 +169,5 @@ body.ptt #petbox::after { content: ""; position: absolute; inset: 14px 22px 0; b
   #bubble, #thought, #ask, #bar { transition: none; }
   .dots i, #bubble .caret, .tline::before { animation: none; }
   .fx { display: none; }
+  #bubble, #thought { transition: opacity .18s ease; }
 }
