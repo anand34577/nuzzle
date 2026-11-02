@@ -1,0 +1,99 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Companion promo</title>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="../../src/style.css">
+<style>
+html,body{width:1080px;height:1080px;margin:0;overflow:hidden;background:#12141a;color:#f1f3f7;font-family:Inter,"Segoe UI",system-ui,sans-serif}
+.scene{position:absolute;inset:0;opacity:0}
+.bg{position:absolute;inset:0;background:radial-gradient(700px 500px at 80% 0%,rgba(125,162,255,.25),transparent 65%),radial-gradient(600px 400px at 0% 100%,rgba(255,170,130,.14),transparent 65%),#12141a}
+.bg::after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:54px 54px}
+.center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 90px}
+.center img.logo{width:120px;height:120px;margin-bottom:34px}
+.center h1{font-size:156px}
+.center .sub{font-size:40px;margin-top:28px;max-width:820px}
+.cap{position:absolute;left:0;right:0;top:70px;text-align:center;font:600 40px Inter,sans-serif;letter-spacing:-.01em;color:#f1f3f7}
+.cap small{display:block;font:400 26px Inter,sans-serif;color:#9aa4b5;margin-top:10px;letter-spacing:0}
+.win{position:absolute;left:70px;top:210px;width:940px;height:600px;border-radius:14px;background:#1c1f26;box-shadow:0 30px 80px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.08);overflow:hidden}
+.tb{height:40px;background:#14161b;display:flex;align-items:center;padding:0 16px;gap:8px;color:#9aa3b2;font:13px Inter,sans-serif}
+.tb i{width:12px;height:12px;border-radius:50%;background:#ff5f57}.tb i:nth-child(2){background:#febc2e}.tb i:nth-child(3){background:#28c840}.tb span{margin-left:14px}
+.code{padding:20px 0;font:500 17px/1.8 "JetBrains Mono",Consolas,monospace;color:#d4d9e3}
+.code div{display:flex}.code em{width:64px;flex:none;text-align:right;padding-right:24px;color:#556070;font-style:normal}.code .t{white-space:pre}
+.k{color:#c792ea}.f{color:#7fb4ff}.s{color:#9fd88f}.c{color:#6b7587}.n{color:#f4a261}.hl{background:rgba(255,200,90,.12)}
+.w{position:absolute;width:300px;height:420px;left:700px;top:560px;--pet:1}
+.w #bubble,.w #ask{left:-90px;right:-60px;top:-6px;font-size:19px;line-height:1.4;padding:14px 18px;border-radius:16px 16px 16px 4px;color:#1d2026;max-height:none}
+.w #ask-text{font-size:19px}
+.w .ask-row button{min-height:44px;font-size:18px}
+.w .ask-row button.yes.press{transform:scale(.95);filter:brightness(1.15)}
+.w #petbox{left:50%;bottom:20px;width:230px;height:276px;margin-left:-115px}
+.w #pet{overflow:visible}
+.row{position:absolute;left:60px;right:60px;top:300px;display:grid;grid-template-columns:repeat(4,1fr);gap:26px 20px}
+.row div{display:flex;flex-direction:column;align-items:center}
+.row svg{width:170px;height:204px;overflow:visible}
+.row b{font:600 24px Inter,sans-serif;margin-top:8px;color:#f1f3f7}.row span{font:400 19px Inter,sans-serif;color:#9aa4b5}
+</style></head><body>
+<div class="bg"></div>
+
+<div class="scene" id="s1"><div class="center"><img class="logo" src="../logo.svg" alt=""><h1>Companion</h1><p class="sub">A small character on your desktop that talks, listens and helps.</p></div></div>
+
+<div class="scene" id="s2">
+  <div class="cap" id="cap">It sees what you're working on<small>Screen viewing is on, and only when you turn it on.</small></div>
+  <div class="win"><div class="tb"><i></i><i></i><i></i><span>ledger.py &mdash; kestrel-billing</span></div><div class="code" id="code"></div></div>
+  <div class="w" id="w">
+    <div id="bubble"><span id="bubble-text"></span></div>
+    <div id="ask" class="hidden"><div id="ask-text">Edit D:\work\kestrel-billing\ledger.py
+Replace line 42 with Decimal(str(rate))</div><div class="ask-clock"><i id="ask-fill" style="width:60%"></i></div><div class="ask-row"><button class="yes" id="yes">Allow</button><button>No</button></div></div>
+    <div id="petbox"><svg id="pet" viewBox="0 0 200 240"></svg></div>
+  </div>
+</div>
+
+<div class="scene" id="s3"><div class="cap" style="top:110px">Pick from twelve characters<small>Each one has its own voice and habits.</small></div><div class="row" id="row"></div></div>
+
+<div class="scene" id="s4"><div class="center"><img class="logo" src="../logo.svg" alt=""><h1 style="font-size:110px">Companion</h1><p class="sub">Runs on your own graphics card.<br>Nothing leaves your PC.</p><p class="sub" style="font-size:30px;margin-top:40px;color:#7da2ff">Windows 10 and 11</p></div></div>
+
+<script src="../../src/characters.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+const ease=x=>1-Math.pow(1-clamp(x),3);
+const seg=(t,a,b)=>clamp((t-a)/(b-a));
+const lines=[
+ '<span class="k">from</span> decimal <span class="k">import</span> Decimal','',
+ '<span class="k">def</span> <span class="f">apply_tax</span>(subtotal, region):',
+ '    <span class="c"># rates come from the regional tax table</span>',
+ '    rate = TAX_TABLE[region][<span class="s">"rate"</span>]',
+ '    <span class="k">return</span> subtotal * (<span class="n">1</span> + rate)','',
+ '<span class="k">def</span> <span class="f">reconcile</span>(invoices, payments):',
+ '    open_items = []',
+ '    <span class="k">for</span> inv <span class="k">in</span> invoices:',
+ '        paid = <span class="f">sum</span>(p.amount <span class="k">for</span> p <span class="k">in</span> payments)',
+ '        <span class="k">if</span> paid &lt; <span class="f">apply_tax</span>(inv.subtotal, inv.region):',
+];
+$('code').innerHTML=lines.map((t,i)=>`<div class="${i==5?'hl':''}"><em>${i+37}</em><span class="t">${t}</span></div>`).join('');
+$('pet').innerHTML=characterSvg('pip');
+for(const id of ['pip','mochi','bruno','zap','nimbus','pebble','ember','bun']){const m=characterMeta(id);const d=document.createElement('div');
+ d.innerHTML='<svg viewBox="0 0 200 240">'+characterSvg(id,{forPreview:true})+'</svg><b>'+m.name+'</b><span>'+m.tagline+'</span>';$('row').appendChild(d);}
+const reply="Line 42 adds rate to 1, but rate is a string in tax_table.json for DE and PL. That's why October doesn't reconcile. Want me to fix it?";
+const D=11.5;
+function fade(el,t,a,b,fi=.4,fo=.4){el.style.opacity=Math.min(seg(t,a,a+fi),1-seg(t,b-fo,b));}
+window.DURATION=D;
+window.seek=function(t){
+  fade($('s1'),t,0,2.6); const a=ease(seg(t,0,.8)); $('s1').firstChild.style.transform=`translateY(${(1-a)*30}px)`;
+  fade($('s2'),t,2.4,8.0); fade($('s3'),t,7.8,9.9); fade($('s4'),t,9.7,D+1,.4,.01);
+  // scene 2: Pip slides in, bubble types, approval card, allow
+  const w=$('w'); const wi=ease(seg(t,2.8,3.6));
+  w.style.transform=`translateX(${(1-wi)*260}px)`; w.style.opacity=wi;
+  const bob=Math.sin(t*3)*5; $('petbox').style.transform=`translateY(${bob}px)`;
+  const typed=Math.floor(clamp((t-3.7)/2.0)*reply.length);
+  const showAsk=t>=6.1;
+  $('bubble').style.display=showAsk?'none':'block'; $('bubble').classList.remove('hidden');
+  $('bubble-text').textContent=reply.slice(0,typed);
+  $('ask').classList.toggle('hidden',!showAsk);
+  $('ask').style.transform=`translateY(${(1-ease(seg(t,6.1,6.5)))*14}px)`;
+  $('yes').classList.toggle('press',t>7.2);
+  $('ask-fill').style.width=(100-seg(t,6.1,8)*100*.45)+'%';
+  $('cap').innerHTML=t<6.1?"It sees what you're working on<small>Screen viewing is on, and only when you turn it on.</small>":"It asks before it acts<small>Writing a file needs your approval. No answer counts as no.</small>";
+  // scene 3: staggered pop
+  [...$('row').children].forEach((el,i)=>{const p=ease(seg(t,8.0+i*.1,8.5+i*.1));el.style.opacity=p;el.style.transform=`translateY(${(1-p)*26}px) scale(${.9+.1*p})`;});
+  [...$('s4').firstChild.children].forEach((el,i)=>{const p=ease(seg(t,9.8+i*.12,10.4+i*.12));el.style.transform=`translateY(${(1-p)*24}px)`;});
+};
+seek(0);
+</script></body></html>

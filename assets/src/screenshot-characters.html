@@ -1,0 +1,17 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Companion characters</title>
+<link rel="stylesheet" href="stage.css">
+<style>
+body{background:#f4f5f7!important;color:#1b1e24}
+h1{position:absolute;left:80px;top:56px;font:600 30px Inter,sans-serif;letter-spacing:-.02em;margin:0}
+p{position:absolute;left:80px;top:104px;font:16px Inter,sans-serif;color:#565d6a;margin:0}
+.grid{position:absolute;left:80px;right:80px;top:160px;display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.card{background:#fff;border:1px solid #dcdfe5;border-radius:12px;padding:18px 20px 16px;display:flex;flex-direction:column;align-items:center}
+.card svg{width:120px;height:144px;overflow:visible}
+.card b{font:600 17px Inter,sans-serif;margin-top:10px}.card span{font:13.5px Inter,sans-serif;color:#565d6a;margin-top:2px}
+</style></head><body><h1>Twelve characters, each with its own habits</h1><p>Pick one in Settings. They all react to your pointer, wander your screen and fall asleep when you leave.</p>
+<div class="grid" id="g"></div>
+<script src="../../src/characters.js"></script>
+<script>
+for(const id of ['pip', 'mochi', 'bruno', 'zap', 'nimbus', 'pebble', 'ember', 'bun', 'axo', 'wisp', 'penny', 'cosmo']){const m=characterMeta(id);const d=document.createElement('div');d.className='card';
+d.innerHTML='<svg viewBox="0 0 200 240">'+characterSvg(id,{forPreview:true})+'</svg><b>'+m.name+'</b><span>'+m.tagline+'</span>';g.appendChild(d)}
+</script></body></html>

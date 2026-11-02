@@ -1,0 +1,30 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Companion banner</title>
+<link rel="stylesheet" href="brand.css">
+<style>
+html,body{width:1600px;height:400px}
+h1{font-size:104px}
+.sub{font-size:30px;max-width:640px;margin-top:20px}
+.cast{gap:0;margin-right:-10px;padding-top:48px}
+.cast svg{width:230px;height:276px}
+.cast svg:nth-child(2){margin-left:-24px;width:210px;height:252px}
+.cast svg:nth-child(3){margin-left:-20px;width:240px;height:288px}
+.cast svg:nth-child(4){margin-left:-24px;width:206px;height:247px}
+.floor{bottom:62px}
+</style></head><body>
+<div class="hero">
+  <div class="copy">
+    <div class="mark"><img src="../logo.svg" alt=""><span>Desktop app for Windows</span></div>
+    <h1>Companion</h1>
+    <p class="sub">A small character on your desktop that talks, listens and helps, powered by a model running on your own PC.</p>
+  </div>
+  <div class="cast" id="cast"></div>
+  <div class="floor"></div>
+</div>
+<script src="../../src/characters.js"></script>
+<script>
+for (const id of ['pip','mochi','zap','bruno']) {
+  const s=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  s.setAttribute('viewBox','0 0 200 240'); s.innerHTML=characterSvg(id,{forPreview:true});
+  document.getElementById('cast').appendChild(s);
+}
+</script></body></html>

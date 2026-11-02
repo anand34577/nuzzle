@@ -1,0 +1,18 @@
+Companion
+Copyright 2026 Anand
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+Third-party software and models
+-------------------------------
+llama.cpp (https://github.com/ggml-org/llama.cpp), MIT License.
+  Bundled in the installer as pre-built binaries. Its license text ships in
+  src-tauri/resources/llama alongside the binaries.
+
+LFM3-Omni (https://huggingface.co/LiquidAI/LFM3-Omni-2B-GGUF), by LiquidAI.
+  Not part of this repository or the installer. The app downloads it on first
+  run, and it is covered by LiquidAI's own license. Read those terms before
+  redistributing the model or using it commercially.
+
+Tauri, the Rust crates and the npm packages listed in Cargo.lock and
+package-lock.json are used under their own licenses (MIT or Apache-2.0).

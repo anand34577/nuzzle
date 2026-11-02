@@ -1,0 +1,18 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+html,body{width:1440px;height:900px;margin:0;overflow:hidden}
+body{font-family:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;background:linear-gradient(135deg,#25304f 0%,#3b3f6b 45%,#6b4a6e 100%);position:relative}
+.win{position:absolute;left:90px;top:70px;width:1010px;height:700px;border-radius:12px;background:#1c1f26;box-shadow:0 30px 80px rgba(0,0,0,.45);overflow:hidden;border:1px solid rgba(255,255,255,.08)}
+.tb{height:38px;background:#14161b;display:flex;align-items:center;padding:0 14px;gap:8px;color:#9aa3b2;font-size:12.5px}
+.tb i{width:12px;height:12px;border-radius:50%;background:#ff5f57}.tb i:nth-child(2){background:#febc2e}.tb i:nth-child(3){background:#28c840}
+.tb span{margin-left:14px}
+.ed{display:grid;grid-template-columns:210px 1fr;height:calc(100% - 38px)}
+.side{background:#171a20;border-right:1px solid #262a33;padding:14px 0;color:#aab2c0;font-size:13px}
+.side b{display:block;padding:4px 16px;font-size:11px;letter-spacing:.08em;color:#6f7888;font-weight:600;margin-bottom:6px}
+.side div{padding:5px 16px}.side .on{background:#252a35;color:#fff}
+.code{padding:18px 0;font:13.5px/1.75 "JetBrains Mono",Consolas,monospace;color:#d4d9e3}
+.code div{display:flex;white-space:pre}.code em{width:56px;flex:none;text-align:right;padding-right:22px;color:#556070;font-style:normal}
+.k{color:#c792ea}.f{color:#7fb4ff}.s{color:#9fd88f}.c{color:#6b7587}.n{color:#f4a261}.hl{background:rgba(255,200,90,.1)}
+.widget{position:absolute;width:260px;height:340px}
+.taskbar{position:absolute;left:0;right:0;bottom:0;height:52px;background:rgba(15,17,23,.85);display:flex;align-items:center;padding:0 22px;gap:14px;color:#cfd5e0;font-size:12.5px}
+.taskbar i{width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,.14)}.taskbar span{margin-left:auto}
+.code .t{white-space:pre}

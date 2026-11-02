@@ -1,0 +1,31 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Companion social preview</title>
+<link rel="stylesheet" href="brand.css">
+<style>
+html,body{width:1280px;height:640px}
+.hero{flex-direction:column;align-items:flex-start;justify-content:center;padding:0 90px}
+h1{font-size:128px}
+.sub{font-size:36px;max-width:640px;margin-top:26px}
+.mark{font-size:24px}
+.cast{position:absolute;right:70px;bottom:78px}
+.cast svg{width:230px;height:276px}
+.cast svg:nth-child(2){margin-left:-30px;width:200px;height:240px}
+.cast svg:nth-child(3){display:none}
+.floor{bottom:78px}
+</style></head><body>
+<div class="hero">
+  <div class="copy">
+    <div class="mark"><img src="../logo.svg" alt=""><span>Windows · runs on your own hardware</span></div>
+    <h1>Companion</h1>
+    <p class="sub">A desktop character that talks and helps, using a model that never leaves your PC.</p>
+  </div>
+  <div class="cast" id="cast"></div>
+  <div class="floor"></div>
+</div>
+<script src="../../src/characters.js"></script>
+<script>
+for (const id of ['pip','mochi']) {
+  const s=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  s.setAttribute('viewBox','0 0 200 240'); s.innerHTML=characterSvg(id,{forPreview:true});
+  document.getElementById('cast').appendChild(s);
+}
+</script></body></html>
