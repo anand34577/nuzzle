@@ -10,6 +10,15 @@ on:
 permissions:
   contents: read
 
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: never
+
+# A newer push to the same branch cancels the older run; tag builds are never cancelled.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   test:
     runs-on: windows-latest
@@ -21,6 +30,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          cache-on-failure: true
+      # build.rs checks that the bundled resources exist, so even clippy and tests need llama.cpp in place.
+      - name: Fetch pinned llama.cpp
+        shell: pwsh
+        run: ./scripts/fetch-llama.ps1 -Force
       - name: Clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets -- -D warnings
@@ -28,8 +42,8 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
+  # Runs in parallel with `test`, so a release doesn't wait for a second cold compile.
   bundle:
-    needs: test
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,6 +55,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          cache-on-failure: true
 
       # The llama.cpp version is pinned in llama.cpp.version and verified against llama.cpp.sha256.
       # To upgrade: change both files in one commit (see README, "Updating llama.cpp").
