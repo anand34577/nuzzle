@@ -606,7 +606,8 @@ mod tests {
         assert!(validate_shortcuts("CommandOrControl+Alt+C", "CommandOrControl+Shift+Space").is_ok());
         assert!(validate_shortcuts("", "").is_ok(), "both may be turned off");
         assert!(validate_shortcuts("Ctrl+Alt+Banana", "").is_err());
-        assert!(validate_shortcuts("Control+Alt+Space", "").is_err(), "the stop shortcut is reserved");
+        // Written another way (CommandOrControl is Cmd on a Mac, Ctrl elsewhere), it is still the reserved stop.
+        assert!(validate_shortcuts("commandorcontrol+alt+space", "").is_err(), "the stop shortcut is reserved");
         assert!(validate_shortcuts("Ctrl+Alt+C", "control+alt+c").is_err(), "must differ");
         let bad = |f: &dyn Fn(&mut Settings)| {
             let mut s = Settings::default();

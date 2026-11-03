@@ -4,7 +4,7 @@
 |---|---|
 | Windows | Windows 10 or 11, 64-bit. |
 | macOS | macOS 11 or later (Apple silicon or Intel). |
-| Linux | 64-bit, X11 recommended (Debian/Ubuntu `.deb`, Fedora `.rpm`, or the AppImage). |
+| Linux | x64 or ARM64 with glibc 2.39+ (Ubuntu 24.04+, Debian 13, Fedora 40+), X11 recommended. `.deb`, `.rpm` or AppImage. |
 | Graphics card | Any GPU with Vulkan support (recent NVIDIA, AMD and Intel cards all have it). 4 GB of video memory or more is comfortable. Without one, set GPU layers to 0 and the model runs on the processor, more slowly. |
 | Disk space | About 1.4 GB for the model, plus the installer. |
 | Microphone | Optional, needed only for voice. |

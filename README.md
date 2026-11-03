@@ -76,7 +76,7 @@ on macOS, and `.deb`, `.rpm` and AppImage on Linux.
 - **macOS**: grant Microphone, Screen Recording and Accessibility when asked (Settings -> Safety has buttons for each
   pane). Shortcuts use Cmd where Windows uses Ctrl, so stop is Cmd+Option+Space. The app isn't notarized yet; right-click
   it and choose *Open* the first time.
-- **Linux**: X11 works best. Wayland desktops restrict global shortcuts, screen capture, pointer control and
+- **Linux**: the packages need glibc 2.39 or newer (Ubuntu 24.04+, Debian 13, Fedora 40+). X11 works best. Wayland desktops restrict global shortcuts, screen capture, pointer control and
   click-through windows. Clipboard tools need `wl-clipboard` or `xclip`; saved tokens need a running keyring
   (GNOME Keyring or KWallet).
 

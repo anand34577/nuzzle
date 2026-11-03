@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-22.04, macos-14]
+        os: [windows-latest, ubuntu-24.04, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -68,13 +68,14 @@ jobs:
             files: |
               src-tauri/target/release/bundle/nsis/*.exe
               src-tauri/target/release/bundle/msi/*.msi
-          - os: ubuntu-22.04
+          # 24.04: the screen-capture crate needs PipeWire 1.0 headers (22.04 ships 0.3.48).
+          - os: ubuntu-24.04
             name: companion-linux-x64
             files: |
               src-tauri/target/release/bundle/deb/*.deb
               src-tauri/target/release/bundle/rpm/*.rpm
               src-tauri/target/release/bundle/appimage/*.AppImage
-          - os: ubuntu-22.04-arm
+          - os: ubuntu-24.04-arm
             name: companion-linux-arm64
             files: |
               src-tauri/target/release/bundle/deb/*.deb
