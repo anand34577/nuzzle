@@ -13,16 +13,16 @@ Keep your graphics driver current. Vulkan problems are almost always an old driv
 
 ## Install from a release
 
-1. Open the [Releases page](https://github.com/anand34577/companion/releases) and download `Companion_<version>_x64-setup.exe`. An `.msi` is there too if you prefer one.
+1. Open the [Releases page](https://github.com/anand34577/nuzzle/releases) and download `Nuzzle_<version>_x64-setup.exe`. An `.msi` is there too if you prefer one.
 2. Optionally check the file against `SHA256SUMS.txt` from the same release:
 
    ```powershell
-   Get-FileHash .\Companion_0.1.0_x64-setup.exe -Algorithm SHA256
+   Get-FileHash .\Nuzzle_0.1.0_x64-setup.exe -Algorithm SHA256
    ```
 
    The hash printed should match the line for that file.
 3. Run the installer. Windows may show a SmartScreen warning because the installer isn't code-signed yet. Choose *More info*, then *Run anyway*.
-4. Companion starts when the install finishes. Look for a small icon in the system tray (bottom right, possibly under the `^` arrow).
+4. Nuzzle starts when the install finishes. Look for a small icon in the system tray (bottom right, possibly under the `^` arrow).
 
 llama.cpp is part of the installer, so there is nothing else to install.
 

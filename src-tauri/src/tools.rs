@@ -426,7 +426,7 @@ async fn fetch_raw(url: &str, allow_private: bool) -> Result<(String, String), S
             .redirect(reqwest::redirect::Policy::none())
             .resolve(&host, addr)
             .timeout(Duration::from_secs(15))
-            .user_agent("Companion/0.1")
+            .user_agent("Nuzzle/0.1")
             .build()
             .map_err(|e| e.to_string())?;
         let r = client.get(url.clone()).send().await.map_err(|e| format!("I couldn't reach that page ({e})."))?;
@@ -663,7 +663,7 @@ fn open_windows() -> Result<Vec<Value>, String> {
         .into_iter()
         .filter_map(|w| {
             let title = w.title().ok()?;
-            if title.trim().is_empty() || title == "Companion" || title == "Companion settings" {
+            if title.trim().is_empty() || title == "Nuzzle" || title == "Nuzzle settings" {
                 return None;
             }
             Some(json!({"app": w.app_name().unwrap_or_default(), "title": clip(&title, 120), "minimized": w.is_minimized().unwrap_or(false)}))
@@ -707,7 +707,7 @@ fn home_dir() -> std::path::PathBuf {
 async fn launch_app(name: &str) -> Result<(), String> {
     let mut c = if cfg!(windows) {
         let mut c = tokio::process::Command::new("powershell");
-        c.args(["-NoProfile", "-NonInteractive", "-Command", "Start-Process -FilePath $env:COMPANION_APP"]).env("COMPANION_APP", name);
+        c.args(["-NoProfile", "-NonInteractive", "-Command", "Start-Process -FilePath $env:NUZZLE_APP"]).env("NUZZLE_APP", name);
         c
     } else if cfg!(target_os = "macos") {
         let mut c = tokio::process::Command::new("open");
@@ -755,11 +755,13 @@ fn mailto(to: &str, cc: &str, subject: &str, body: &str) -> String {
     format!("mailto:{}{}{}", to.join(","), if q.is_empty() { "" } else { "?" }, q.join("&"))
 }
 
-/// Where notes are kept: Documents/Companion Notes (created on first use).
+/// Where notes are kept: Documents/Nuzzle Notes (created on first use).
 fn notes_dir() -> std::path::PathBuf {
     let home = home_dir();
     let docs = home.join("Documents");
-    (if docs.is_dir() { docs } else { home }).join("Companion Notes")
+    let base = if docs.is_dir() { docs } else { home };
+    let old = base.join("Companion Notes");   // folder from before the rename: keep using it
+    if old.is_dir() && !base.join("Nuzzle Notes").is_dir() { old } else { base.join("Nuzzle Notes") }
 }
 
 /// A file name from a note title: letters, digits, spaces and a few marks; nothing that could leave the folder.
@@ -1472,7 +1474,7 @@ mod tests {
 
     #[test]
     fn finds_files_by_name() {
-        let d = std::env::temp_dir().join(format!("companion-find-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("nuzzle-find-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("deep/er")).unwrap();
         std::fs::create_dir_all(d.join(".hidden")).unwrap();
@@ -1503,7 +1505,7 @@ mod tests {
 
     #[tokio::test]
     async fn directory_listing_and_file_head() {
-        let d = std::env::temp_dir().join(format!("companion-tools-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("nuzzle-tools-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("sub")).unwrap();
         std::fs::write(d.join("a.txt"), "hello world").unwrap();

@@ -18,13 +18,13 @@ Settings are saved as `settings.json` in `%APPDATA%\dev.companion.desktop`. Toke
 
 ## Tools
 
-Built-in tools, MCP servers and web connectors. See [Using Companion](Usage#mcp-servers).
+Built-in tools, MCP servers and web connectors. See [Using Nuzzle](Usage#mcp-servers).
 
 ## Voice & sight
 
 | Setting | What it does |
 |---|---|
-| Microphone, speaker | Choose devices. A level meter, chime and voice test are built in. If a headset is unplugged, Companion switches device and tells you. |
+| Microphone, speaker | Choose devices. A level meter, chime and voice test are built in. If a headset is unplugged, Nuzzle switches device and tells you. |
 | Volume, mute spoken replies | Mute keeps the text bubbles. |
 | Language you speak | Helps it understand you. |
 | Push to talk | Hold `Ctrl+Shift+Space` to speak. |

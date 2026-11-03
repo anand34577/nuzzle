@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest something Companion should do
+about: Suggest something Nuzzle should do
 labels: enhancement
 ---
 

@@ -21,7 +21,7 @@ if (-not $Force -and (Test-Path $marker) -and ((Get-Content $marker -Raw).Trim()
 
 $asset = "llama-$tag-bin-win-vulkan-x64.zip"
 $url = "https://github.com/ggml-org/llama.cpp/releases/download/$tag/$asset"
-$tmp = Join-Path ([IO.Path]::GetTempPath()) "companion-llama-$tag"
+$tmp = Join-Path ([IO.Path]::GetTempPath()) "nuzzle-llama-$tag"
 New-Item -ItemType Directory -Force $tmp | Out-Null
 $zip = Join-Path $tmp $asset
 

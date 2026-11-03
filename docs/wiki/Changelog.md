@@ -1,4 +1,4 @@
-Newest first. The detailed list is in [CHANGELOG.md](https://github.com/anand34577/companion/blob/main/CHANGELOG.md).
+Newest first. The detailed list is in [CHANGELOG.md](https://github.com/anand34577/nuzzle/blob/main/CHANGELOG.md).
 
 ## 0.1.0 (2 November 2026)
 

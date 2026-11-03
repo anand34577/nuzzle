@@ -4,7 +4,7 @@
 * [Getting started](Getting-Started)
 
 **Use**
-* [Using Companion](Usage)
+* [Using Nuzzle](Usage)
 * [Settings reference](Configuration)
 * [Safety and privacy](Safety)
 

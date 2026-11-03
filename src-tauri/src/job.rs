@@ -44,7 +44,7 @@ fn watchdog(parent: u32, child: u32) {
     const SCRIPT: &str =
         r#"while kill -0 "$1" 2>/dev/null && kill -0 "$2" 2>/dev/null; do sleep 1; done; kill -0 "$1" 2>/dev/null || kill -9 -"$2" 2>/dev/null"#;
     let spawned = std::process::Command::new("sh")
-        .args(["-c", SCRIPT, "companion-watchdog", &parent.to_string(), &child.to_string()])
+        .args(["-c", SCRIPT, "nuzzle-watchdog", &parent.to_string(), &child.to_string()])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())

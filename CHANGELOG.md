@@ -2,6 +2,21 @@
 
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] - 2026-11-03
+
+### Changed
+- The app is now called **Nuzzle** (it was "Companion"), with a new fox-face icon. Your settings, memory and saved tokens carry over; an existing "Companion Notes" folder keeps being used.
+- A calmer, friendlier Settings window: indigo and orange palette, grouped navigation, toggles as proper rows, and a save bar that only appears when there is something to save.
+- Fixed fields that rendered tiny or unstyled (Telegram token, URLs) and the cramped MCP server rows.
+
+### Added
+- Welcome hero with live setup progress and the next step named.
+- Quick search (Ctrl+K) to jump to any setting, and Ctrl+S to save.
+- "Try asking me" one-tap prompts in Chat (screen summary, focus timer, stretch reminder, weather).
+- Loading states everywhere: a moving bar under the title bar while loading or saving, placeholder rows for lists, a spinner on Save and on one-tap prompts, and a progress bar on MCP servers that are starting.
+- A redesigned MCP server screen: icon tiles for each server type, a status pill, tool chips, and an error banner with a Try again button.
+- Right-click menu on the pet: "What's on my screen?" and a 25 minute focus timer.
+
 ## [0.2.0] - 2026-11-03
 
 ### Added

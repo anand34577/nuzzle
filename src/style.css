@@ -146,10 +146,10 @@ body.chatting #bar { display: none; }
 button:focus-visible, #chat input:focus-visible { outline: 2px solid #8ab4ff; outline-offset: 1px; }
 
 /* right-click menu: what we can do together, with a row of little need meters */
-#menu { position: absolute; z-index: 9; min-width: 150px; padding: 5px; border-radius: 12px; background: var(--paper); border: 1px solid var(--edge);
+#menu { position: absolute; z-index: 9; min-width: 190px; padding: 5px; border-radius: 12px; background: var(--paper); border: 1px solid var(--edge);
   box-shadow: 0 6px 18px rgba(0,0,0,.18); display: flex; flex-direction: column; gap: 1px; transition: opacity .12s ease, transform .12s ease; }
 #menu.hidden { opacity: 0; transform: scale(.92) translateY(4px); pointer-events: none; }
-#menu button { text-align: left; padding: 6px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
+#menu button { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; text-align: left; padding: 7px 11px; border: 0; border-radius: 7px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
 #menu button:hover, #menu button:focus-visible { background: var(--paper-2); outline: none; }
 .needs { display: flex; gap: 4px; padding: 3px 4px 6px; border-bottom: 1px solid var(--edge); margin-bottom: 3px; }
 .needs span { flex: 1; position: relative; height: 18px; border-radius: 6px; background: var(--paper-2); font-size: 11px; line-height: 18px; text-align: center; overflow: hidden; color: var(--ink); }
@@ -185,3 +185,6 @@ body.ptt #petbox::after { content: ""; position: absolute; inset: 14px 22px 0; b
   .fx { display: none; }
   #bubble, #thought { transition: opacity .18s ease; }
 }
+
+#menu kbd { font: 600 10px/1 inherit; color: var(--ink-2); opacity: .75; }
+.menu-sep { height: 1px; margin: 3px 4px; background: var(--edge); }

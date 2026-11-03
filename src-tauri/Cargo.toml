@@ -1,11 +1,11 @@
 [package]
-name = "companion"
-version = "0.2.0"
+name = "nuzzle"
+version = "0.3.0"
 license = "Apache-2.0"
 edition = "2021"
 
 [lib]
-name = "companion_lib"
+name = "nuzzle_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

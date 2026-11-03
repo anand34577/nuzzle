@@ -47,7 +47,7 @@ const pinFile = path.join(root, key === 'windows-x64' ? 'llama.cpp.sha256' : `ll
 let expected = fs.existsSync(pinFile) ? fs.readFileSync(pinFile, 'utf8').trim().toLowerCase() : '';
 if (expected && !/^[0-9a-f]{64}$/.test(expected)) fail(`${path.basename(pinFile)} must be a 64-character hex SHA-256`);
 
-const headers = { 'User-Agent': 'companion-fetch-llama', Accept: 'application/vnd.github+json' };
+const headers = { 'User-Agent': 'nuzzle-fetch-llama', Accept: 'application/vnd.github+json' };
 if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
 const rel = await fetch(`https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/${tag}`, { headers });
 if (!rel.ok) fail(`couldn't read release ${tag} from GitHub (HTTP ${rel.status})`);
@@ -60,7 +60,7 @@ if (!expected) {
   console.warn(`warning: ${path.basename(pinFile)} not found; using GitHub's published SHA-256 ${expected}`);
 }
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), `companion-llama-${tag}-`));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), `nuzzle-llama-${tag}-`));
 const archive = path.join(tmp, asset.name);
 console.log(`Downloading ${asset.browser_download_url}`);
 const res = await fetch(asset.browser_download_url, { headers: { 'User-Agent': headers['User-Agent'] } });

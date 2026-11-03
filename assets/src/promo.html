@@ -1,10 +1,10 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Companion promo</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Nuzzle promo</title>
 <link rel="stylesheet" href="brand.css">
 <link rel="stylesheet" href="../../src/style.css">
 <style>
 html,body{width:1080px;height:1080px;margin:0;overflow:hidden;background:#12141a;color:#f1f3f7;font-family:Inter,"Segoe UI",system-ui,sans-serif}
 .scene{position:absolute;inset:0;opacity:0}
-.bg{position:absolute;inset:0;background:radial-gradient(700px 500px at 80% 0%,rgba(125,162,255,.25),transparent 65%),radial-gradient(600px 400px at 0% 100%,rgba(255,170,130,.14),transparent 65%),#12141a}
+.bg{position:absolute;inset:0;background:radial-gradient(700px 500px at 80% 0%,rgba(169,155,255,.26),transparent 65%),radial-gradient(600px 400px at 0% 100%,rgba(255,165,97,.18),transparent 65%),#12141a}
 .bg::after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:54px 54px}
 .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 90px}
 .center img.logo{width:120px;height:120px;margin-bottom:34px}
@@ -32,7 +32,7 @@ html,body{width:1080px;height:1080px;margin:0;overflow:hidden;background:#12141a
 </style></head><body>
 <div class="bg"></div>
 
-<div class="scene" id="s1"><div class="center"><img class="logo" src="../logo.svg" alt=""><h1>Companion</h1><p class="sub">A small character on your desktop that talks, listens and helps.</p></div></div>
+<div class="scene" id="s1"><div class="center"><img class="logo" src="../logo.svg" alt=""><h1>Nuzzle</h1><p class="sub">A small character on your desktop that talks, listens and helps.</p></div></div>
 
 <div class="scene" id="s2">
   <div class="cap" id="cap">It sees what you're working on<small>Screen viewing is on, and only when you turn it on.</small></div>
@@ -47,7 +47,7 @@ Replace line 42 with Decimal(str(rate))</div><div class="ask-clock"><i id="ask-f
 
 <div class="scene" id="s3"><div class="cap" style="top:110px">Pick from twelve characters<small>Each one has its own voice and habits.</small></div><div class="row" id="row"></div></div>
 
-<div class="scene" id="s4"><div class="center"><img class="logo" src="../logo.svg" alt=""><h1 style="font-size:110px">Companion</h1><p class="sub">Runs on your own graphics card.<br>Nothing leaves your PC.</p><p class="sub" style="font-size:30px;margin-top:40px;color:#7da2ff">Windows 10 and 11</p></div></div>
+<div class="scene" id="s4"><div class="center"><img class="logo" src="../logo.svg" alt=""><h1 style="font-size:110px">Nuzzle</h1><p class="sub">Runs on your own graphics card.<br>Nothing leaves your PC.</p><p class="sub" style="font-size:30px;margin-top:40px;color:#a99bff">Windows, macOS and Linux</p></div></div>
 
 <script src="../../src/characters.js"></script>
 <script>
@@ -95,5 +95,5 @@ window.seek=function(t){
   [...$('row').children].forEach((el,i)=>{const p=ease(seg(t,8.0+i*.1,8.5+i*.1));el.style.opacity=p;el.style.transform=`translateY(${(1-p)*26}px) scale(${.9+.1*p})`;});
   [...$('s4').firstChild.children].forEach((el,i)=>{const p=ease(seg(t,9.8+i*.12,10.4+i*.12));el.style.transform=`translateY(${(1-p)*24}px)`;});
 };
-seek(0);
+seek(location.hash.startsWith("#t=") ? Number(location.hash.slice(3)) : 0);
 </script></body></html>

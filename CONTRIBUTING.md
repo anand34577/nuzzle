@@ -28,7 +28,7 @@ CI runs the same two commands. If you change behaviour, setup or settings, updat
 
 ## Licensing of contributions
 
-Companion is licensed under Apache-2.0. Unless you say otherwise, any contribution you submit is licensed under the
+Nuzzle is licensed under Apache-2.0. Unless you say otherwise, any contribution you submit is licensed under the
 same terms (section 5 of the license). Don't submit code you don't have the right to share, and don't paste in code
 from projects with incompatible licenses.
 

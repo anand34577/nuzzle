@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn persists_and_survives_corruption() {
-        let dir = std::env::temp_dir().join(format!("companion-mem-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("nuzzle-mem-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let p = dir.join("memory.json");
         let mut l = vec![];

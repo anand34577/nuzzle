@@ -164,8 +164,8 @@ async fn serve(core: Arc<Core>, mut stream: TcpStream) -> std::io::Result<()> {
                 Ok(answer) if path == "/message" => reply(&mut stream, "200 OK", &json!({"reply": answer})).await,
                 Ok(answer) => {
                     let out = json!({
-                        "id": format!("companion-{}", crate::sys::unix_now()), "object": "chat.completion", "created": crate::sys::unix_now(),
-                        "model": "companion", "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": answer}}],
+                        "id": format!("nuzzle-{}", crate::sys::unix_now()), "object": "chat.completion", "created": crate::sys::unix_now(),
+                        "model": "nuzzle", "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": answer}}],
                     });
                     reply(&mut stream, "200 OK", &out).await
                 }

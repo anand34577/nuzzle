@@ -1064,13 +1064,13 @@ fn register_shortcuts(core: &Arc<Core>) -> Option<String> {
 }
 
 fn build_tray(app: &tauri::App, core: &Arc<Core>) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "toggle", "Show / hide companion", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "toggle", "Show / hide Nuzzle", true, None::<&str>)?;
     let come = MenuItem::with_id(app, "come", "Come here!", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings...", true, None::<&str>)?;
     let roam = CheckMenuItem::with_id(app, "roam", "Wander around the screen", true, true, None::<&str>)?;
     let stop = MenuItem::with_id(app, "stop", "Stop everything", true, None::<&str>)?;
     let logs = MenuItem::with_id(app, "logs", "Open log folder", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Companion", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Nuzzle", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let current = core.settings.lk().character.clone();
     let mut items = vec![];
@@ -1086,7 +1086,7 @@ fn build_tray(app: &tauri::App, core: &Arc<Core>) -> tauri::Result<()> {
 
     let c = core.clone();
     let mut builder = TrayIconBuilder::with_id("main")
-        .tooltip("Companion")
+        .tooltip("Nuzzle")
         .menu(&menu)
         // Menu-bar icons open their menu on click on a Mac; elsewhere a left click shows or hides the companion.
         .show_menu_on_left_click(cfg!(target_os = "macos"))
@@ -1264,7 +1264,7 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             let log_dir = app.path().app_log_dir()?;
             log::init(&log_dir);
-            log::info("Companion starting");
+            log::info("Nuzzle starting");
 
             let settings_path = app.path().app_config_dir()?.join("settings.json");
             let memory_path = app.path().app_config_dir()?.join("memory.json");

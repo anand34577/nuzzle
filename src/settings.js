@@ -40,6 +40,11 @@ let ackFull = false;       // the user has accepted the full-access warning
 let llamaInfo = { bundled: false };
 
 // ------------------------------------------------------------------ helpers
+/** A thin moving bar under the title bar while something loads or saves. */
+let topCount = 0;
+function setTop(on) { topCount = Math.max(0, topCount + (on ? 1 : -1)); $('#toploader').hidden = topCount === 0; }
+/** Grey placeholder rows while a list loads, so the page never looks empty or stuck. */
+function skeleton(sel, n = 2) { const h = $(sel); if (h) h.innerHTML = Array.from({ length: n }, () => '<li class="skel-row"><span class="skel w3"></span><span class="skel w1"></span></li>').join(''); }
 let toastTimer;
 function toast(text, error = false) {
   const t = $('#toast');
@@ -121,7 +126,7 @@ const RULES = {
   asr_prompt: (s) => (s.asr_prompt.length > 400 ? 'That is too long (400 characters max).' : ''),
   llama_args: (s) => {
     const bad = s.llama_args.split(/\s+/).find((a) => MANAGED_FLAGS.includes(a));
-    return bad ? `${bad} is managed by Companion; please remove it.` : '';
+    return bad ? `${bad} is managed by Nuzzle; please remove it.` : '';
   },
   ptt_shortcut: (s) => (s.listen_mode === 'push' && !s.ptt_shortcut ? 'Push to talk needs a shortcut.'
     : s.ptt_shortcut && s.ptt_shortcut.toLowerCase() === s.chat_shortcut.toLowerCase() ? 'Use a different shortcut from the typing box.' : ''),
@@ -210,6 +215,7 @@ function refresh() {
     : pending ? 'Checking your files...' : dirty ? 'You have unsaved changes' : 'All changes saved';
   $('#btn-save').disabled = !!errors || !!pending || !dirty;
   $('#btn-revert').disabled = !dirty;
+  $('#savebar').classList.toggle('show', !!(errors || pending || dirty));
 
   // setup progress
   const done1 = (s.llama_server && pathRes.llama_server && pathRes.llama_server.ok && pathRes.llama_server.value === s.llama_server)
@@ -219,6 +225,15 @@ function refresh() {
   const done4 = brain.state === 'ready';
   $('#mem-off').hidden = $('#memory_enabled').checked;
   [done1, done2, done3, done4].forEach((d, i) => $('#step-' + (i + 1)).classList.toggle('done', !!d));
+  const doneN = [done1, done2, done3, done4].filter(Boolean).length;
+  const NEXT = ['Get the engine', 'Choose a model', 'Pick your graphics card', 'Wake me up'];
+  const nextIdx = [done1, done2, done3, done4].findIndex((d) => !d);
+  $('#progress-label').textContent = doneN === 4 ? 'All set' : `${doneN} of 4 done`;
+  $('#progress-next').textContent = nextIdx < 0 ? '' : `Next: ${NEXT[nextIdx]}`;
+  $('#progress-fill').style.width = (doneN * 25) + '%';
+  $('#progress-bar').setAttribute('aria-valuenow', String(doneN));
+  $('#setup-lead').textContent = doneN === 4 ? "I'm awake and living on your desktop. Say hi, or try something from the Chat tab." : 'Four quick steps and your new buddy comes to life. Everything runs on this computer.';
+  $$('#suggest button').forEach((b) => { b.disabled = !done4; });
   $('#dot-setup').classList.toggle('on', !done2);
   return { s, errors, pending, dirty };
 }
@@ -470,7 +485,7 @@ async function loadMemory() {
     li.className = 'mem-item';
     li.innerHTML = '<div class="text"><span class="t"></span><span class="meta"><span class="by"></span> · <span class="d"></span></span></div><button type="button"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>';
     $('.t', li).textContent = m.text;
-    $('.by', li).textContent = m.by === 'user' ? 'You' : current.name || 'Companion';
+    $('.by', li).textContent = m.by === 'user' ? 'You' : current.name || 'Nuzzle';
     $('.d', li).textContent = fmtDate(m.created);
     const b = $('button', li);
     b.setAttribute('aria-label', 'Forget: ' + m.text); b.title = 'Forget this';
@@ -599,7 +614,7 @@ async function renderGallery() {
   for (const t of MCP_TEMPLATES) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'mcp-tile';
-    b.innerHTML = '<strong></strong><small></small>';
+    b.innerHTML = `<span class="mcp-ico">${iconSvg(t.id)}</span><strong></strong><small></small>`;
     $('strong', b).textContent = t.label; $('small', b).textContent = t.desc;
     b.onclick = () => addMcp({ name: t.id, cmdText: t.cmd(docs), extraText: t.env || '', showExtra: !!t.env }, t.note);
     g.appendChild(b);
@@ -612,16 +627,18 @@ function renderMcps() {
   mcps.forEach((m, i) => {
     const el = document.createElement('div');
     el.className = 'mcp';
-    el.innerHTML = `<div class="mcp-head">
-        <div class="field mcp-name" data-mf="name"><label>Name</label><input type="text" maxlength="24" autocomplete="off" spellcheck="false" placeholder="files"><div class="msg"></div></div>
+    el.innerHTML = `<div class="mcp-top">
+        <span class="mcp-ico" data-mico></span>
+        <div class="field mcp-name" data-mf="name"><label class="sr">Server name</label><input type="text" maxlength="24" autocomplete="off" spellcheck="false" placeholder="Name, e.g. files"><div class="msg"></div></div>
         <span class="status" data-mstatus data-state="off"><i></i><span>Not saved</span></span>
-        <label class="switch sm"><input type="checkbox" data-men><span class="track"></span><span class="switch-text"><strong>On</strong></span></label>
-        <button type="button" class="btn ghost sm" data-mextra>Keys</button>
-        <button type="button" class="btn danger sm" data-mdel aria-label="Remove">Remove</button>
+        <label class="switch sm"><input type="checkbox" data-men aria-label="Turn this server on"><span class="track"></span></label>
       </div>
+      <div class="bar indet mcp-load" data-mload hidden role="progressbar" aria-label="Starting server"><i></i></div>
       <div class="field full" data-mf="cmdText"><label>Command or web address</label><input type="text" autocomplete="off" spellcheck="false" placeholder="npx -y @modelcontextprotocol/server-memory   or   https://example.com/mcp"><div class="msg"></div></div>
       <div class="field full" data-mf="extraText" data-mextrabox><label data-mextralabel></label><textarea spellcheck="false"></textarea><div class="msg"></div></div>
-      <div class="mcp-tools" data-mtools></div><div class="mcp-err" data-merr></div>`;
+      <div class="mcp-tools" data-mtools></div>
+      <div class="mcp-err" data-merr hidden><span data-merr-text></span><button type="button" class="btn sm" data-mretry>Try again</button></div>
+      <div class="mcp-foot"><button type="button" class="btn ghost sm" data-mextra>Keys &amp; settings</button><span class="spacer"></span><button type="button" class="btn danger sm" data-mdel>Remove</button></div>`;
     const bind = (f, sel) => {
       const input = $(`[data-mf="${f}"] ${sel}`, el);
       input.value = m[f];
@@ -640,6 +657,7 @@ function renderMcps() {
     en.onchange = () => { m.enabled = en.checked; refresh(); applyMcpStatus(); };
     $('[data-mextra]', el).onclick = () => { m.showExtra = !m.showExtra; extraLabel(); };
     $('[data-mdel]', el).onclick = () => { mcps.splice(i, 1); renderMcps(); refresh(); };
+    $('[data-mretry]', el).onclick = (e) => busy(e.currentTarget, 'Trying...', () => invoke('mcp_reload').catch((err) => toast(String(err), true)));
     host.appendChild(el);
   });
   applyMcpStatus();
@@ -675,6 +693,24 @@ $('#mcp-paste-add').onclick = () => {
 };
 
 /* Live status of each saved server next to its editor row. */
+const ICONS = {
+  files: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  memory: '<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 8.5l3 7M16 8.5l-3 7M8.5 7h7"/>',
+  fetch: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+  time: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  git: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M18 11.5c0 4-6 3-11 5"/>',
+  github: '<path d="M8 8l-5 4 5 4M16 8l5 4-5 4M14 5l-4 14"/>',
+  playwright: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/>',
+  web: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  plug: '<path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/>',
+};
+function mcpIconFor(cmd) {
+  const c = (cmd || '').toLowerCase();
+  const hit = [['filesystem', 'files'], ['server-memory', 'memory'], ['mcp-server-fetch', 'fetch'], ['mcp-server-time', 'time'], ['mcp-server-git', 'git'], ['githubcopilot', 'github'], ['playwright', 'playwright']].find(([k]) => c.includes(k));
+  return hit ? hit[1] : isUrl(cmd) ? 'web' : 'plug';
+}
+const iconSvg = (k) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[k] || ICONS.plug}</svg>`;
+
 function applyMcpStatus() {
   $$('.mcp').forEach((el, i) => {
     const m = mcps[i];
@@ -688,10 +724,18 @@ function applyMcpStatus() {
     }
     const chip = $('[data-mstatus]', el);
     chip.dataset.state = state; $('span', chip).textContent = text;
+    el.dataset.state = state;
+    $('[data-mload]', el).hidden = state !== 'starting';
+    $('[data-mico]', el).innerHTML = iconSvg(mcpIconFor(m.cmdText));
     const tools = $('[data-mtools]', el);
     tools.innerHTML = '';
-    if (st && saved && st.state === 'ready') for (const t of st.tools.slice(0, 30)) { const s = document.createElement('span'); s.textContent = t; tools.appendChild(s); }
-    $('[data-merr]', el).textContent = st && saved && st.state === 'error' ? st.message : '';
+    if (state === 'starting') tools.innerHTML = '<span class="skel w1"></span><span class="skel w2"></span><span class="skel w3"></span>';
+    else if (st && saved && st.state === 'ready') {
+      const head = document.createElement('b'); head.textContent = `${st.tools.length} tool${st.tools.length === 1 ? '' : 's'}`; tools.appendChild(head);
+      for (const t of st.tools.slice(0, 30)) { const s = document.createElement('span'); s.textContent = t; tools.appendChild(s); }
+    }
+    const err = $('[data-merr]', el), bad = st && saved && st.state === 'error';
+    err.hidden = !bad; $('[data-merr-text]', err).textContent = bad ? st.message : '';
   });
 }
 async function loadMcpStatus() {
@@ -747,7 +791,7 @@ setInterval(loadReminders, 30000);
 // ------------------------------------------------------------------ appearance (this window only)
 const UI_DEFAULT = { theme: 'system', density: 'compact', font: 'system', scale: 100 };
 let ui = { ...UI_DEFAULT };
-try { ui = { ...UI_DEFAULT, ...JSON.parse(localStorage.getItem('companion-ui') || '{}') }; } catch { /* defaults */ }
+try { ui = { ...UI_DEFAULT, ...JSON.parse(localStorage.getItem('nuzzle-ui') || '{}') }; } catch { /* defaults */ }
 const sendZoom = debounce((pct) => invoke('ui_zoom', { label: 'settings', pct }).catch(() => {}), 80);
 function applyUi(persist = true) {
   const r = document.documentElement;
@@ -755,7 +799,7 @@ function applyUi(persist = true) {
   $('#ui-theme').value = ui.theme; $('#ui-density').value = ui.density; $('#ui-font').value = ui.font;
   $('#ui-scale').value = ui.scale; $('#ui-scale-out').textContent = ui.scale + '%';
   sendZoom(ui.scale);
-  if (persist) { try { localStorage.setItem('companion-ui', JSON.stringify(ui)); } catch { /* private mode */ } }
+  if (persist) { try { localStorage.setItem('nuzzle-ui', JSON.stringify(ui)); } catch { /* private mode */ } }
 }
 for (const [id, key] of [['ui-theme', 'theme'], ['ui-density', 'density'], ['ui-font', 'font']]) {
   $('#' + id).addEventListener('change', () => { ui[key] = $('#' + id).value; applyUi(); });
@@ -792,7 +836,7 @@ async function loadChat() {
     const li = document.createElement('li');
     li.className = 'msg-' + m.role;
     li.innerHTML = '<span class="who"></span><span class="said"></span><time></time>';
-    $('.who', li).textContent = m.role === 'user' ? 'You' : current.name || 'Companion';
+    $('.who', li).textContent = m.role === 'user' ? 'You' : current.name || 'Nuzzle';
     $('.said', li).textContent = m.text;
     $('time', li).textContent = fmtClock(m.t);
     host.appendChild(li);
@@ -803,7 +847,7 @@ async function loadChat() {
   $('#chat-copy').disabled = $('#chat-clear').disabled = !chatLines.length;
 }
 $('#chat-copy').onclick = () => {
-  const text = chatLines.map((m) => `${m.role === 'user' ? 'You' : current.name || 'Companion'}: ${m.text}`).join('\n');
+  const text = chatLines.map((m) => `${m.role === 'user' ? 'You' : current.name || 'Nuzzle'}: ${m.text}`).join('\n');
   navigator.clipboard.writeText(text).then(() => toast('Copied.'), () => toast("I couldn't copy that.", true));
 };
 $('#chat-clear').onclick = () => invoke('clear_transcript');
@@ -904,14 +948,15 @@ $$('[data-size]').forEach((b) => { b.onclick = () => { const p = Number(b.datase
 async function save() {
   const { s, errors, pending } = refresh();
   if (errors || pending) return false;
-  $('#btn-save').disabled = true;
+  const btn = $('#btn-save');
+  btn.disabled = true; btn.classList.add('busy'); btn.textContent = 'Saving...'; setTop(true);
   try {
     const restarting = await invoke('save_settings', { settings: s });
     current = s; snap = readForm();
-    refresh();
     toast(restarting ? 'Saved. Reloading my brain...' : 'Saved. Changes apply straight away.');
     return true;
-  } catch (e) { toast(String(e), true); refresh(); return false; }
+  } catch (e) { toast(String(e), true); return false; }
+  finally { btn.classList.remove('busy'); btn.textContent = 'Save'; setTop(false); refresh(); }
 }
 
 async function wake() {
@@ -1046,6 +1091,64 @@ $('#add-hook').onclick = () => { hooks.push({ name: '', description: '', url: ''
 for (const id of ['btn-logs', 'btn-logs-2']) $('#' + id).onclick = () => invoke('open_logs').catch((e) => toast(String(e), true));
 $('#btn-quit').onclick = () => invoke('quit');
 
+// ------------------------------------------------------------------ suggestions, quick search, shortcuts
+$$('#suggest button').forEach((b) => {
+  b.onclick = () => busy(b, 'Sending...', () => invoke('send_text', { text: b.dataset.say }).then(() => toast('Sent. Watch your desktop.')).catch((e) => toast(String(e), true)));
+});
+
+const palette = $('#palette'), pInput = $('#palette-input'), pList = $('#palette-list');
+let pItems = [], pSel = 0, pIndex = null;
+/** Every setting label, switch title and section heading, with the tab it lives on. */
+function buildIndex() {
+  const out = [];
+  for (const panel of $$('.panel')) {
+    const tab = panel.dataset.panel, tabName = $(`.nav [data-tab="${tab}"] span`).textContent;
+    out.push({ text: tabName, tab, el: null, where: 'Section' });
+    for (const el of $$('h2, label[for], .switch-text strong, .seg strong, summary', panel)) {
+      const text = el.textContent.replace(/\s+/g, ' ').trim();
+      if (text.length > 2 && text.length < 70) out.push({ text, tab, el: el.closest('.card, .step, .field, details') || el, where: tabName });
+    }
+  }
+  return out;
+}
+function paletteRender() {
+  const q = pInput.value.trim().toLowerCase();
+  pIndex ||= buildIndex();
+  pItems = (q ? pIndex.filter((i) => i.text.toLowerCase().includes(q) || i.where.toLowerCase().includes(q)) : pIndex.filter((i) => !i.el)).slice(0, 30);
+  pSel = Math.min(pSel, Math.max(0, pItems.length - 1));
+  pList.innerHTML = '';
+  if (!pItems.length) { pList.innerHTML = '<li class="palette-empty">Nothing matches. Try a shorter word.</li>'; return; }
+  pItems.forEach((it, i) => {
+    const li = document.createElement('li');
+    li.setAttribute('role', 'option'); li.setAttribute('aria-selected', String(i === pSel));
+    li.innerHTML = '<span class="what"></span><span class="where"></span>';
+    $('.what', li).textContent = it.text; $('.where', li).textContent = it.where;
+    li.onclick = () => paletteGo(it);
+    pList.appendChild(li);
+  });
+}
+function paletteGo(it) {
+  palette.close();
+  showTab(it.tab);
+  if (it.el) setTimeout(() => { it.el.scrollIntoView({ block: 'center' }); it.el.classList.add('flash'); setTimeout(() => it.el.classList.remove('flash'), 1500); }, 60);
+}
+function paletteOpen() { pInput.value = ''; pSel = 0; paletteRender(); palette.showModal(); pInput.focus(); }
+$('#search-btn').onclick = paletteOpen;
+pInput.addEventListener('input', () => { pSel = 0; paletteRender(); });
+pInput.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    pSel = (pSel + (e.key === 'ArrowDown' ? 1 : -1) + pItems.length) % Math.max(1, pItems.length);
+    paletteRender(); pList.children[pSel]?.scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter' && pItems[pSel]) { e.preventDefault(); paletteGo(pItems[pSel]); }
+});
+palette.addEventListener('click', (e) => { if (e.target === palette) palette.close(); });
+window.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  if (e.key.toLowerCase() === 'k') { e.preventDefault(); paletteOpen(); }
+  else if (e.key.toLowerCase() === 's') { e.preventDefault(); if (!$('#btn-save').disabled) save(); }
+});
+
 // ------------------------------------------------------------------ remote: Telegram and the agent API
 function setStatus(el, state, text) { el.dataset.state = state; $('span', el).textContent = text; }
 async function loadRemote() {
@@ -1112,6 +1215,10 @@ T.event.listen('settings-changed', async () => {
 T.event.listen('settings-shown', () => { if (JSON.stringify(readForm()) === JSON.stringify(snap)) load(false).catch(() => {}); });
 
 async function load(first) {
+  setTop(true);
+  try { await load1(first); } finally { setTop(false); }
+}
+async function load1(first) {
   current = await invoke('get_settings');
   fill(current);
   snap = readForm();
@@ -1120,6 +1227,7 @@ async function load(first) {
   if (first && !current.model) { showTab('setup'); detectLlama(); scanModels(); }
 }
 applyUi(false);
+skeleton('#mem-list'); skeleton('#rem-list'); skeleton('#chat-log', 1);
 renderChars();
 initDownload();
 initLlama();

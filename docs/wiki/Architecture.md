@@ -1,4 +1,4 @@
-Companion is a [Tauri 2](https://tauri.app) app: a Rust backend in `src-tauri/src` and a plain HTML, CSS and JavaScript front end in `src` (no bundler).
+Nuzzle is a [Tauri 2](https://tauri.app) app: a Rust backend in `src-tauri/src` and a plain HTML, CSS and JavaScript front end in `src` (no bundler).
 
 ## Layout
 

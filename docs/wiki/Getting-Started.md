@@ -20,10 +20,10 @@ In step 3, choose the card to run the model on. If you have an integrated and a 
 
 Press **Save & wake me up**. The first start loads the model into memory, which takes a while. A small pill below the character shows progress. When it finishes, the character says hello.
 
-![Pip waiting on the desktop with the toolbar visible](https://raw.githubusercontent.com/anand34577/companion/main/assets/screenshot-chat.png)
+![Pip waiting on the desktop with the toolbar visible](https://raw.githubusercontent.com/anand34577/nuzzle/main/assets/screenshot-chat.png)
 
 ### 6. Say something
 
 Talk to it, or press `Ctrl+Alt+C` and type. To ask about your screen, turn on the eye button in the toolbar first.
 
-What next: [Using Companion](Usage) for everything it can do, and [Safety and privacy](Safety) before you turn on computer control.
+What next: [Using Nuzzle](Usage) for everything it can do, and [Safety and privacy](Safety) before you turn on computer control.

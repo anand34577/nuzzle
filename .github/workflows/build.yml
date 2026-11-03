@@ -1,4 +1,4 @@
-name: Build Companion
+name: Build Nuzzle
 
 on:
   push:
@@ -64,30 +64,30 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            name: companion-windows-x64
+            name: nuzzle-windows-x64
             files: |
               src-tauri/target/release/bundle/nsis/*.exe
               src-tauri/target/release/bundle/msi/*.msi
           # 24.04: the screen-capture crate needs PipeWire 1.0 headers (22.04 ships 0.3.48).
           - os: ubuntu-24.04
-            name: companion-linux-x64
+            name: nuzzle-linux-x64
             files: |
               src-tauri/target/release/bundle/deb/*.deb
               src-tauri/target/release/bundle/rpm/*.rpm
               src-tauri/target/release/bundle/appimage/*.AppImage
           - os: ubuntu-24.04-arm
-            name: companion-linux-arm64
+            name: nuzzle-linux-arm64
             files: |
               src-tauri/target/release/bundle/deb/*.deb
               src-tauri/target/release/bundle/rpm/*.rpm
               src-tauri/target/release/bundle/appimage/*.AppImage
           - os: macos-14
-            name: companion-macos-arm64
+            name: nuzzle-macos-arm64
             files: |
               src-tauri/target/release/bundle/dmg/*.dmg
           # Intel Macs: cross-built on the Apple-silicon runner, with the x64 llama.cpp bundled.
           - os: macos-14
-            name: companion-macos-x64
+            name: nuzzle-macos-x64
             target: x86_64-apple-darwin
             llama_arch: x64
             files: |
@@ -140,7 +140,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: companion-*
+          pattern: nuzzle-*
           path: dist
       - name: Flatten and write checksums
         working-directory: dist
@@ -153,4 +153,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Companion $GITHUB_REF_NAME" --generate-notes
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Nuzzle $GITHUB_REF_NAME" --generate-notes

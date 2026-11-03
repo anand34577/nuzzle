@@ -439,7 +439,7 @@ impl Settings {
     /// Human-readable reason the settings can't be used, if any.
     pub fn validate(&self) -> Result<(), String> {
         if self.name.trim().is_empty() || self.name.chars().count() > 40 {
-            return Err("Companion name must be 1-40 characters.".into());
+            return Err("Nuzzle name must be 1-40 characters.".into());
         }
         if !(40..=200).contains(&self.size_pct) {
             return Err("Size must be between 40% and 200%.".into());
@@ -510,7 +510,7 @@ impl Settings {
         }
         for a in self.llama_args.split_whitespace() {
             if ["--host", "--port", "--api-key", "-m", "--model", "--mmproj", "--device"].contains(&a) {
-                return Err(format!("Extra flag '{a}' is managed by Companion; remove it."));
+                return Err(format!("Extra flag '{a}' is managed by Nuzzle; remove it."));
             }
         }
         if self.telegram_enabled {
@@ -553,7 +553,7 @@ mod tests {
     use super::*;
 
     fn tmp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("companion-test-{}-{name}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("nuzzle-test-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&d);
         d.join("settings.json")
     }

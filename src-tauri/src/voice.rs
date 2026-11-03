@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn voice_samples_are_checked() {
-        let d = std::env::temp_dir().join(format!("companion-voice-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("nuzzle-voice-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         let mut good = b"RIFF\x00\x00\x00\x00WAVEfmt ".to_vec();

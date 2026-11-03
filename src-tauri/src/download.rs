@@ -135,7 +135,7 @@ pub async fn fetch(
 pub async fn run(core: Arc<Core>) {
     let total: u64 = ITEMS.iter().map(|i| i.size).sum();
     let client = match reqwest::Client::builder()
-        .user_agent("Companion/0.1")
+        .user_agent("Nuzzle/0.1")
         .connect_timeout(Duration::from_secs(15))
         .build()
     {
@@ -225,7 +225,7 @@ mod tests {
     }
 
     fn tmp(name: &str) -> std::path::PathBuf {
-        let d = std::env::temp_dir().join(format!("companion-dl-{}-{name}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("nuzzle-dl-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         d
     }

@@ -37,7 +37,7 @@ fn system_prompt(s: &Settings, memory: &str) -> String {
         "Screen positions are x,y on a 0-1000 grid: (0,0) is the top-left of the screenshot and (1000,1000) the bottom-right."
     };
     format!(
-        "You are {name}, a small, warm, playful companion who lives on the user's desktop; your personality: {persona}. \
+        "You are {name}, a small, warm, playful buddy who lives on the user's desktop; your personality: {persona}. \
 Your replies are spoken aloud, so use short plain sentences (usually one or two), no markdown, no lists, no emoji. \
 You can see the user's screen through screenshots; one is attached when the request seems to be about the screen, \
 otherwise call refresh_view to look. {coords} \
@@ -113,7 +113,7 @@ fn tool_specs(core: &Core) -> Value {
         f("email_draft", "Open a ready-to-send email draft in the user's mail app (they review and press Send). Write the full text yourself.",
             json!({"to": {"type": "string", "description": "addresses, comma-separated; may be empty"}, "cc": {"type": "string"},
                 "subject": {"type": "string"}, "body": {"type": "string"}}), &["subject", "body"]),
-        f("notes", "The user's notes (Markdown files in Documents/Companion Notes): save, append to, read or list them.",
+        f("notes", "The user's notes (Markdown files in Documents/Nuzzle Notes): save, append to, read or list them.",
             json!({"action": {"type": "string", "description": "save, append, read or list"},
                 "title": {"type": "string"}, "text": {"type": "string"}}), &["action"]),
         f("weather", "Current weather and the next 3 days for a town or city.", json!({"place": {"type": "string"}}), &["place"]),

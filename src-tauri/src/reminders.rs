@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn persists() {
-        let p = std::env::temp_dir().join(format!("companion-rem-{}", std::process::id())).join("r.json");
+        let p = std::env::temp_dir().join(format!("nuzzle-rem-{}", std::process::id())).join("r.json");
         let mut l = vec![];
         add(&mut l, 5, 5, "persist me").unwrap();
         save(&p, &l).unwrap();

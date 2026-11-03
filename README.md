@@ -1,23 +1,23 @@
 <picture>
-  <img alt="Companion: a small character on your desktop that talks, listens and helps" src="assets/banner.png" width="100%">
+  <img alt="Nuzzle: a small character on your desktop that talks, listens and helps" src="assets/banner.png" width="100%">
 </picture>
 
-[![Build](https://github.com/anand34577/companion/actions/workflows/build.yml/badge.svg)](https://github.com/anand34577/companion/actions/workflows/build.yml)
-![Version](https://img.shields.io/badge/version-0.2.0-2f5fd0)
-![License](https://img.shields.io/badge/license-Apache--2.0-2f5fd0)
+[![Build](https://github.com/anand34577/nuzzle/actions/workflows/build.yml/badge.svg)](https://github.com/anand34577/nuzzle/actions/workflows/build.yml)
+![Version](https://img.shields.io/badge/version-0.3.0-5a4bd1)
+![License](https://img.shields.io/badge/license-Apache--2.0-5a4bd1)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-444)
 
-Companion is a desktop app for Windows, macOS and Linux. A small animated character lives on your screen, listens when you talk, can look at
+Nuzzle is a desktop app for Windows, macOS and Linux. A small animated character lives on your screen, listens when you talk, can look at
 what you're doing, and answers out loud. The language model runs on your own graphics card through llama.cpp, so nothing
 you say or show leaves the machine.
 
 <p align="center"><img alt="Pip, the default character, pointing out a bug in a Python file and offering to fix it" src="assets/screenshot-chat.png" width="860"></p>
 
-A [11-second clip](assets/companion-promo.mp4) (1080×1080 MP4) is included for sharing on X and LinkedIn.
+A [11-second clip](assets/nuzzle-promo.mp4) (1080×1080 MP4) is included for sharing on X and LinkedIn.
 
 ## Why
 
-Most assistants live in a browser tab and only know what you paste into them. Companion sits next to your work, sees the
+Most assistants live in a browser tab and only know what you paste into them. Nuzzle sits next to your work, sees the
 screen when you let it, and can act on it with your approval. The model is small enough (about 1.4 GB) to run on a
 mid-range GPU, and everything stays local.
 
@@ -41,7 +41,7 @@ mid-range GPU, and everything stays local.
 
 ## Quick start
 
-1. Download the installer for your system from the [Releases](https://github.com/anand34577/companion/releases) page:
+1. Download the installer for your system from the [Releases](https://github.com/anand34577/nuzzle/releases) page:
    `*_x64-setup.exe` or `.msi` (Windows), `*_aarch64.dmg` (Apple silicon) or `*_x64.dmg` (Intel Mac), `.deb`, `.rpm` or
    `.AppImage` for Linux on x64 or ARM64.
 2. Open **Settings** from the tray icon. On first launch it opens by itself.
@@ -49,7 +49,7 @@ mid-range GPU, and everything stays local.
    press *Save & wake me up*.
 
 llama.cpp is already inside the installer. You should see your character appear and say hello. The
-[Getting started](https://github.com/anand34577/companion/wiki/Getting-Started) wiki page walks through each step.
+[Getting started](https://github.com/anand34577/nuzzle/wiki/Getting-Started) wiki page walks through each step.
 
 ## Build from source
 
@@ -141,7 +141,7 @@ a build at or after llama.cpp PR #31257 (`b12038` includes it).
   mid-air and I fall onto the window below or the ground; I get the zoomies now and then; I yawn and nap sooner when
   tired, and ask for a treat or a pat when I've been ignored (never in *quiet* mode).
 - **Helpful tools:** `email_draft` opens a finished email in your mail app (you press Send), `notes` keeps Markdown notes
-  in *Documents/Companion Notes*, `weather` gives the forecast (Open-Meteo, no account), `media_key` plays, pauses and
+  in *Documents/Nuzzle Notes*, `weather` gives the forecast (Open-Meteo, no account), `media_key` plays, pauses and
   changes volume, and `come_here` brings me to your pointer.
 - **Telegram** (Settings -> Remote): make a bot with @BotFather, paste its token, press *Pair my phone* and send the code
   to your bot. Only paired chats are answered; risky actions show *Allow / No* buttons in the chat; `/stop` stops me.
@@ -164,7 +164,7 @@ a build at or after llama.cpp PR #31257 (`b12038` includes it).
 - The model download is pinned to a fixed revision and its SHA-256 is verified.
 - `Ctrl+Alt+Space` stops everything instantly. The model server listens on a random local port with a per-launch key.
 - llama-server and MCP servers can't outlive the app, even after a crash: a Job Object on Windows, and on macOS/Linux
-  their own process group watched by a tiny watchdog that cleans up if Companion disappears.
+  their own process group watched by a tiny watchdog that cleans up if Nuzzle disappears.
 - Telegram answers only chats paired with a one-time code; the agent API needs its token and listens only on this
   computer unless you allow your network. Both tokens live in the credential store.
 
@@ -178,7 +178,7 @@ cargo clippy --all-targets
 
 ## More
 
-The [wiki](https://github.com/anand34577/companion/wiki) covers installation, every setting, troubleshooting and how
+The [wiki](https://github.com/anand34577/nuzzle/wiki) covers installation, every setting, troubleshooting and how
 the app is put together. The same pages live in [docs/wiki](docs/wiki).
 
 ## Contributing
@@ -187,7 +187,7 @@ Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Companion is released under the [Apache License 2.0](LICENSE). You can use, modify and redistribute it, including in
+Nuzzle is released under the [Apache License 2.0](LICENSE). You can use, modify and redistribute it, including in
 commercial work, as long as you keep the license and [NOTICE](NOTICE) and state your changes. The software comes with no
 warranty. The bundled llama.cpp is MIT-licensed, and the LFM3-Omni model that the app downloads is under LiquidAI's own
 license (see [NOTICE](NOTICE)).

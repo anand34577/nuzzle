@@ -14,7 +14,7 @@ labels: bug
 
 **Your setup**
 
-- Companion version:
+- Nuzzle version:
 - Windows version:
 - Graphics card and driver:
 - Log file (Settings > Advanced shows where it is):

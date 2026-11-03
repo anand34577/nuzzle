@@ -25,13 +25,13 @@ Hover over the character to show it. From left to right: microphone, screen view
 
 Risky actions show an approval card. It counts down, and no answer counts as no.
 
-![Approval card asking to edit a file](https://raw.githubusercontent.com/anand34577/companion/main/assets/screenshot-approval.png)
+![Approval card asking to edit a file](https://raw.githubusercontent.com/anand34577/nuzzle/main/assets/screenshot-approval.png)
 
 ## Characters
 
 Pick one in Settings, *Character*. Each has its own voice, idle habits and replies when you poke it. You can also draw a rectangle on screen to keep the character inside it.
 
-![The twelve characters](https://raw.githubusercontent.com/anand34577/companion/main/assets/screenshot-characters.png)
+![The twelve characters](https://raw.githubusercontent.com/anand34577/nuzzle/main/assets/screenshot-characters.png)
 
 ## MCP servers
 

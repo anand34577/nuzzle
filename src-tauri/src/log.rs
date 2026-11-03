@@ -1,4 +1,4 @@
-//! Tiny append-only log file (`companion.log`, rotated at 1 MB). Errors shown in the speech bubble vanish
+//! Tiny append-only log file (`nuzzle.log`, rotated at 1 MB). Errors shown in the speech bubble vanish
 //! after a few seconds; this keeps the full text for troubleshooting.
 
 use std::{
@@ -19,7 +19,7 @@ static SINCE_CHECK: AtomicU64 = AtomicU64::new(0);
 
 pub fn init(dir: &Path) {
     let _ = fs::create_dir_all(dir);
-    let p = dir.join("companion.log");
+    let p = dir.join("nuzzle.log");
     rotate(&p);
     let _ = PATH.set(p);
 }
@@ -27,7 +27,7 @@ pub fn init(dir: &Path) {
 /// Move a log over the size limit aside (replacing the previous `.old` one).
 fn rotate(p: &Path) {
     if fs::metadata(p).is_ok_and(|m| m.len() > MAX_BYTES) {
-        let _ = fs::rename(p, p.with_file_name("companion.old.log"));
+        let _ = fs::rename(p, p.with_file_name("nuzzle.old.log"));
     }
 }
 
@@ -96,13 +96,13 @@ mod tests {
 
     #[test]
     fn big_logs_are_rotated() {
-        let d = std::env::temp_dir().join(format!("companion-log-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("nuzzle-log-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
-        let p = d.join("companion.log");
+        let p = d.join("nuzzle.log");
         std::fs::write(&p, vec![b'x'; 1_100_000]).unwrap();
         super::rotate(&p);
-        assert!(!p.exists() && d.join("companion.old.log").exists());
+        assert!(!p.exists() && d.join("nuzzle.old.log").exists());
     }
 
     #[test]

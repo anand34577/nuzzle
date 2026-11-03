@@ -185,7 +185,7 @@ impl StdioClient {
 impl HttpClient {
     fn new(cfg: &McpServerCfg) -> Result<Self, String> {
         let http = reqwest::Client::builder()
-            .user_agent("Companion/0.1")
+            .user_agent("Nuzzle/0.1")
             .connect_timeout(Duration::from_secs(10))
             .build()
             .map_err(|e| e.to_string())?;
@@ -260,7 +260,7 @@ impl Client {
     async fn handshake(&self) -> Result<(), String> {
         self.request(
             "initialize",
-            json!({"protocolVersion": PROTOCOL, "capabilities": {}, "clientInfo": {"name": "companion", "version": "0.1"}}),
+            json!({"protocolVersion": PROTOCOL, "capabilities": {}, "clientInfo": {"name": "nuzzle", "version": "0.1"}}),
             20,
         )
         .await?;
@@ -577,7 +577,7 @@ mod tests {
         if std::process::Command::new(py).arg("--version").output().is_err() {
             return;
         }
-        let dir = std::env::temp_dir().join(format!("companion-mcp-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("nuzzle-mcp-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let script = dir.join("server.py");
         std::fs::write(

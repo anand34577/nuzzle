@@ -101,7 +101,7 @@ const NEED_DECAY = { food: 4, love: 3, fun: 6, energy: 5 };      // points lost 
 const N = { food: 80, love: 70, fun: 70, energy: 90 };
 let needsKey = '';
 function loadNeeds(id) {
-  needsKey = 'companion-needs-' + id;
+  needsKey = 'nuzzle-needs-' + id;
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(needsKey) || 'null'); } catch { /* fresh start */ }
   Object.assign(N, { food: 80, love: 70, fun: 70, energy: 90 }, saved && saved.n);
@@ -594,6 +594,8 @@ $('petbox').addEventListener('contextmenu', (e) => { e.preventDefault(); openMen
 $('menu').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
 addEventListener('mousedown', (e) => { if (!$('menu').contains(e.target)) closeMenu(); });
 addEventListener('blur', closeMenu);
+/** Send a ready-made message, or say why I can't yet. */
+function sayToMe(text) { invoke('send_text', { text }).catch((e) => quip(String(e), 3000)); }
 const menuActions = {
   treat() {
     const n = performance.now();
@@ -618,6 +620,8 @@ const menuActions = {
     setTimeout(() => { S.napUntil = performance.now() + 3 * 60000; }, 1600);
   },
   chat() { openChat(); },
+  screen() { sayToMe('What is on my screen right now? Give me a short summary and tell me if you can help with anything.'); },
+  focus() { sayToMe('Start a 25 minute focus timer and remind me to take a break when it ends.'); },
   settings() { call('open_settings'); },
 };
 $('menu').addEventListener('click', (e) => {

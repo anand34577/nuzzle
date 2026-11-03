@@ -1,6 +1,6 @@
 ## The engine step is red
 
-The bundled `llama-server.exe` is missing or blocked. If you built from source, run `npm run fetch:llama` and restart. If you installed from a release, reinstall; antivirus sometimes quarantines it, so add an exclusion for the Companion install folder.
+The bundled `llama-server.exe` is missing or blocked. If you built from source, run `npm run fetch:llama` and restart. If you installed from a release, reinstall; antivirus sometimes quarantines it, so add an exclusion for the Nuzzle install folder.
 
 ## Windows says "Windows protected your PC"
 

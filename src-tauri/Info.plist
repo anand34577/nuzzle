@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>NSMicrophoneUsageDescription</key>
-  <string>Companion listens to your voice so you can talk to your character. Audio stays on this Mac.</string>
+  <string>Nuzzle listens to your voice so you can talk to your character. Audio stays on this Mac.</string>
   <key>LSUIElement</key>
   <true/>
 </dict>

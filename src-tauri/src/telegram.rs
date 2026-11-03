@@ -168,7 +168,7 @@ async fn handle(core: &Arc<Core>, token: &str, u: &Value) {
         };
     }
     if !paired {
-        return send(core, token, chat, "Hi! I'm a private desktop companion. To talk to me, open Settings -> Remote on the computer, make a pairing code and send /pair CODE here.").await;
+        return send(core, token, chat, "Hi! I'm Nuzzle, a private desktop buddy. To talk to me, open Settings -> Remote on the computer, make a pairing code and send /pair CODE here.").await;
     }
     if text == "/start" || text == "/help" {
         return send(core, token, chat, "Just write to me like a chat. I can use my tools for you; anything risky shows Allow / No buttons here. /stop stops whatever I'm doing.").await;
