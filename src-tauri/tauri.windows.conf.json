@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": [
+      "nsis",
+      "msi"
+    ],
+    "resources": [
+      "resources/llama/llama-server.exe",
+      "resources/llama/*.dll",
+      "resources/llama/VERSION",
+      "resources/llama/LICENSE*"
+    ]
+  }
+}

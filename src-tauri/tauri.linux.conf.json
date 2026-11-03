@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": [
+      "deb",
+      "rpm",
+      "appimage"
+    ],
+    "resources": [
+      "resources/llama/*"
+    ],
+    "linux": {
+      "deb": {
+        "depends": [
+          "libvulkan1"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "vulkan-loader"
+        ]
+      }
+    }
+  }
+}
