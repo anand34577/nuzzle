@@ -1,5 +1,6 @@
 //! Keeps tokens out of `settings.json`. Header and environment values of connectors and MCP servers (API keys,
-//! bearer tokens) go to the Windows Credential Manager; the file only holds a reference such as
+//! bearer tokens) go to the OS credential store (Windows Credential Manager, macOS Keychain, or the Secret Service
+//! keyring on Linux); the file only holds a reference such as
 //! `keyring:mcp:github:env:TOKEN`. In memory the settings always hold the real values, so nothing else changes.
 //!
 //! If the credential store can't be used the value stays in the file (and a warning is logged): losing a working
@@ -23,7 +24,9 @@ pub struct OsStore;
 
 impl Store for OsStore {
     fn put(&mut self, id: &str, value: &str) -> Result<(), String> {
-        keyring::Entry::new(SERVICE, id).and_then(|e| e.set_password(value)).map_err(|e| e.to_string())
+        keyring::Entry::new(SERVICE, id).and_then(|e| e.set_password(value)).map_err(|e| e.to_string())?;
+        // A store that accepts the value but can't give it back (no keyring daemon running) would lose it.
+        (self.get(id).as_deref() == Some(value)).then_some(()).ok_or_else(|| "the credential store didn't keep the value".into())
     }
     fn get(&self, id: &str) -> Option<String> {
         keyring::Entry::new(SERVICE, id).ok()?.get_password().ok()
@@ -43,6 +46,8 @@ fn fields(s: &mut Settings) -> Vec<(String, &mut String)> {
             out.push((format!("hook:{}:header:{}", w.name, k), v));
         }
     }
+    out.push(("telegram:token".to_string(), &mut s.telegram_token));
+    out.push(("agent-api:token".to_string(), &mut s.agent_api_token));
     for m in &mut s.mcp_servers {
         for (k, v) in &mut m.env {
             out.push((format!("mcp:{}:env:{}", m.name, k), v));

@@ -9,7 +9,7 @@ use std::{
 static STORED: std::sync::Mutex<std::collections::BTreeSet<String>> = std::sync::Mutex::new(std::collections::BTreeSet::new());
 
 /// Tool names the model already has; a connector may not reuse them.
-pub const BUILTIN_TOOLS: [&str; 23] = [
+pub const BUILTIN_TOOLS: [&str; 34] = [
     "remember",
     "forget",
     "refresh_view",
@@ -33,6 +33,17 @@ pub const BUILTIN_TOOLS: [&str; 23] = [
     "set_reminder",
     "list_reminders",
     "cancel_reminder",
+    "web_search",
+    "calculate",
+    "list_windows",
+    "open_path",
+    "launch_app",
+    "find_files",
+    "come_here",
+    "email_draft",
+    "notes",
+    "weather",
+    "media_key",
 ];
 
 /// Layout of the companion window, in CSS pixels at normal zoom. Only the character scales with `size_pct`; the
@@ -86,6 +97,13 @@ pub const CHARACTERS: [(&str, &str, &str); 12] = [
 
 pub fn persona(id: &str) -> &'static str {
     CHARACTERS.iter().find(|c| c.0 == id).map_or(CHARACTERS[0].2, |c| c.2)
+}
+
+/// A Telegram chat that may talk to me (paired with a one-time code).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+pub struct TelegramChat {
+    pub id: i64,
+    pub name: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -174,7 +192,7 @@ pub struct Settings {
     pub voice_variant: u32,
     /// Send my actual voice to the model (not only a transcript) so it can notice tone, mood and language.
     pub hear_tone: bool,
-    /// Microphone and speaker by name; empty = follow the Windows default.
+    /// Microphone and speaker by name; empty = follow the system default.
     pub mic_device: String,
     pub speaker_device: String,
     /// Playback volume in percent (100 = as synthesised).
@@ -210,6 +228,18 @@ pub struct Settings {
 
     /// User-defined connectors: each becomes a tool that POSTs its JSON args to `url`.
     pub webhooks: Vec<Webhook>,
+
+    /// Talk to me from your phone through your own Telegram bot (made with @BotFather).
+    pub telegram_enabled: bool,
+    pub telegram_token: String,
+    /// Chats allowed to talk to me. Everyone else is told I'm private.
+    pub telegram_chats: Vec<TelegramChat>,
+    /// A small local web API so other programs and agents (OpenClaw, PicoClaw, scripts) can talk to me.
+    pub agent_api_enabled: bool,
+    pub agent_api_port: u16,
+    /// Listen on the local network too (not only this computer). The token is always required.
+    pub agent_api_lan: bool,
+    pub agent_api_token: String,
 }
 
 impl Default for Settings {
@@ -251,6 +281,13 @@ impl Default for Settings {
             roam_area: None,
             mcp_servers: vec![],
             webhooks: vec![],
+            telegram_enabled: false,
+            telegram_token: String::new(),
+            telegram_chats: vec![],
+            agent_api_enabled: false,
+            agent_api_port: 7457,
+            agent_api_lan: false,
+            agent_api_token: String::new(),
         }
     }
 }
@@ -352,7 +389,7 @@ impl Settings {
                 let (found, missing) = crate::secrets::reveal(&mut s, &crate::secrets::OsStore);
                 *STORED.lock().unwrap_or_else(|e| e.into_inner()) = found;
                 let warn = (!missing.is_empty()).then(|| {
-                    "Some saved tokens for your connectors were not found in Windows Credential Manager; please enter them again.".to_string()
+                    "Some saved tokens for your connectors were not found in your system's credential store; please enter them again.".to_string()
                 });
                 (s, warn)
             }
@@ -475,6 +512,24 @@ impl Settings {
             if ["--host", "--port", "--api-key", "-m", "--model", "--mmproj", "--device"].contains(&a) {
                 return Err(format!("Extra flag '{a}' is managed by Companion; remove it."));
             }
+        }
+        if self.telegram_enabled {
+            let t = self.telegram_token.trim();
+            let ok = t.split_once(':').is_some_and(|(id, key)| {
+                !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()) && key.len() >= 20 && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+            });
+            if !ok {
+                return Err("Telegram: paste the bot token from @BotFather (it looks like 123456:ABC-...).".into());
+            }
+        }
+        if self.telegram_chats.len() > 20 {
+            return Err("Telegram: up to 20 paired chats.".into());
+        }
+        if self.agent_api_port < 1024 {
+            return Err("Agent API port must be between 1024 and 65535.".into());
+        }
+        if self.agent_api_enabled && self.agent_api_token.trim().len() < 16 {
+            return Err("Agent API needs a token (press New token).".into());
         }
         let mut seen = std::collections::HashSet::new();
         for w in &self.webhooks {

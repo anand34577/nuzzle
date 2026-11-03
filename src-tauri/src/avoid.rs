@@ -146,9 +146,90 @@ pub fn input_idle() -> Option<Duration> {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+pub fn input_idle() -> Option<Duration> {
+    let secs = unsafe { mac::CGEventSourceSecondsSinceLastEventType(mac::COMBINED_SESSION, mac::ANY_INPUT) };
+    (secs.is_finite() && secs >= 0.0).then(|| Duration::from_secs_f64(secs))
+}
+
+#[cfg(target_os = "linux")]
+pub fn input_idle() -> Option<Duration> {
+    x11::idle()
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 pub fn input_idle() -> Option<Duration> {
     None
+}
+
+/// Is the left mouse button held down right now (anywhere on screen)? Lets a press on the character be told from
+/// a drag even though the window manager swallows the release while it moves the window.
+#[cfg(windows)]
+pub fn left_button_down() -> bool {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
+    unsafe { GetAsyncKeyState(i32::from(VK_LBUTTON)) as u16 & 0x8000 != 0 }
+}
+
+#[cfg(target_os = "macos")]
+pub fn left_button_down() -> bool {
+    unsafe { mac::CGEventSourceButtonState(mac::COMBINED_SESSION, mac::LEFT_BUTTON) }
+}
+
+#[cfg(target_os = "linux")]
+pub fn left_button_down() -> bool {
+    x11::left_button_down()
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+pub fn left_button_down() -> bool {
+    false
+}
+
+/// CoreGraphics input state. Reading it needs no special permission.
+#[cfg(target_os = "macos")]
+mod mac {
+    pub const COMBINED_SESSION: i32 = 0; // kCGEventSourceStateCombinedSessionState
+    pub const LEFT_BUTTON: u32 = 0; // kCGMouseButtonLeft
+    pub const ANY_INPUT: u32 = !0; // kCGAnyInputEventType
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        pub fn CGEventSourceButtonState(state: i32, button: u32) -> bool;
+        pub fn CGEventSourceSecondsSinceLastEventType(state: i32, event_type: u32) -> f64;
+    }
+}
+
+/// X11 pointer state and idle time (also covers XWayland). Under pure Wayland these answer `None`/false and the
+/// companion simply does without. Each thread keeps its own connection, opened on first use.
+#[cfg(target_os = "linux")]
+mod x11 {
+    use std::time::Duration;
+    use x11rb::{connection::Connection, protocol::xproto, rust_connection::RustConnection};
+
+    thread_local! {
+        static CONN: Option<(RustConnection, xproto::Window)> = x11rb::connect(None).ok().and_then(|(c, n)| {
+            let root = c.setup().roots.get(n)?.root;
+            Some((c, root))
+        });
+    }
+
+    pub fn left_button_down() -> bool {
+        CONN.with(|c| {
+            let Some((c, root)) = c else { return false };
+            xproto::ConnectionExt::query_pointer(c, *root)
+                .ok()
+                .and_then(|r| r.reply().ok())
+                .is_some_and(|r| u16::from(r.mask) & u16::from(xproto::KeyButMask::BUTTON1) != 0)
+        })
+    }
+
+    pub fn idle() -> Option<Duration> {
+        CONN.with(|c| {
+            let (c, root) = c.as_ref()?;
+            let r = x11rb::protocol::screensaver::ConnectionExt::screensaver_query_info(c, *root).ok()?.reply().ok()?;
+            Some(Duration::from_millis(u64::from(r.ms_since_user_input)))
+        })
+    }
 }
 
 /// Typing (or at least keyboard-driven work): the user is active, but the pointer has been still for a moment.

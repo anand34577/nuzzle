@@ -1,4 +1,4 @@
-//! Small system helpers: local time (no time-zone crate needed on Windows) and a machine summary.
+//! Small system helpers: local time (from the OS, no time-zone crate needed) and a machine summary.
 
 use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -57,7 +57,25 @@ pub fn local_now() -> LocalTime {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
+pub fn local_now() -> LocalTime {
+    let t = unix_now() as libc::time_t;
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&t, &mut tm) }.is_null() {
+        return from_unix_utc(unix_now());
+    }
+    LocalTime {
+        year: tm.tm_year + 1900,
+        month: (tm.tm_mon + 1) as u32,
+        day: tm.tm_mday as u32,
+        weekday: tm.tm_wday as u32,
+        hour: tm.tm_hour as u32,
+        minute: tm.tm_min as u32,
+        second: tm.tm_sec.min(59) as u32,
+    }
+}
+
+#[cfg(not(any(windows, unix)))]
 pub fn local_now() -> LocalTime {
     from_unix_utc(unix_now())
 }
@@ -112,32 +130,80 @@ pub fn secs_until_clock(h: u32, m: u32) -> u64 {
     secs_until(t.hour * 3600 + t.minute * 60 + t.second, h, m)
 }
 
+/// (total memory, free memory, uptime in seconds), each when the OS tells us.
 #[cfg(windows)]
-fn memory_and_uptime() -> (Option<(u64, u64)>, Option<u64>) {
+fn memory_and_uptime() -> (Option<u64>, Option<u64>, Option<u64>) {
     use windows_sys::Win32::System::SystemInformation::{GetTickCount64, GlobalMemoryStatusEx, MEMORYSTATUSEX};
     let mut m: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
     m.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
     let ok = unsafe { GlobalMemoryStatusEx(&mut m) } != 0;
-    (ok.then_some((m.ullTotalPhys, m.ullAvailPhys)), Some(unsafe { GetTickCount64() } / 1000))
+    (ok.then_some(m.ullTotalPhys), ok.then_some(m.ullAvailPhys), Some(unsafe { GetTickCount64() } / 1000))
 }
 
-#[cfg(not(windows))]
-fn memory_and_uptime() -> (Option<(u64, u64)>, Option<u64>) {
-    (None, None)
+#[cfg(target_os = "linux")]
+fn memory_and_uptime() -> (Option<u64>, Option<u64>, Option<u64>) {
+    let info = std::fs::read_to_string("/proc/meminfo").unwrap_or_default();
+    let kb = |key: &str| {
+        info.lines().find_map(|l| l.strip_prefix(key)?.trim().trim_end_matches("kB").trim().parse::<u64>().ok()).map(|k| k * 1024)
+    };
+    let up = std::fs::read_to_string("/proc/uptime").ok().and_then(|u| u.split('.').next()?.parse::<u64>().ok());
+    (kb("MemTotal:"), kb("MemAvailable:"), up)
+}
+
+#[cfg(target_os = "macos")]
+fn memory_and_uptime() -> (Option<u64>, Option<u64>, Option<u64>) {
+    fn sysctl<T>(name: &str) -> Option<T> {
+        let name = std::ffi::CString::new(name).ok()?;
+        let mut v: T = unsafe { std::mem::zeroed() };
+        let mut len = std::mem::size_of::<T>();
+        let rc = unsafe { libc::sysctlbyname(name.as_ptr(), &mut v as *mut T as *mut libc::c_void, &mut len, std::ptr::null_mut(), 0) };
+        (rc == 0).then_some(v)
+    }
+    let total = sysctl::<u64>("hw.memsize");
+    let up = sysctl::<libc::timeval>("kern.boottime").map(|b| unix_now().saturating_sub(b.tv_sec as u64));
+    (total, None, up)
+}
+
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+fn memory_and_uptime() -> (Option<u64>, Option<u64>, Option<u64>) {
+    (None, None, None)
+}
+
+/// This computer's network name.
+fn computer_name() -> String {
+    #[cfg(unix)]
+    {
+        let mut buf = [0u8; 256];
+        if unsafe { libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) } == 0 {
+            let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+            return String::from_utf8_lossy(&buf[..end]).into_owned();
+        }
+    }
+    std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).unwrap_or_default()
+}
+
+/// A friendly name for the operating system, for the model ("Windows", "macOS", "Linux").
+pub fn os_name() -> &'static str {
+    match std::env::consts::OS {
+        "windows" => "Windows",
+        "macos" => "macOS",
+        "linux" => "Linux",
+        other => other,
+    }
 }
 
 pub fn system_info() -> Value {
-    let (mem, up) = memory_and_uptime();
+    let (total, free, up) = memory_and_uptime();
     let gb = |b: u64| (b as f64 / 1_073_741_824.0 * 10.0).round() / 10.0;
     json!({
         "time": format_local(&local_now()),
-        "os": std::env::consts::OS,
+        "os": os_name(),
         "arch": std::env::consts::ARCH,
-        "computer": std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).unwrap_or_default(),
+        "computer": computer_name(),
         "user": std::env::var("USERNAME").or_else(|_| std::env::var("USER")).unwrap_or_default(),
         "cpu_threads": std::thread::available_parallelism().map_or(0, |n| n.get()),
-        "memory_gb_total": mem.map(|m| gb(m.0)),
-        "memory_gb_free": mem.map(|m| gb(m.1)),
+        "memory_gb_total": total.map(gb),
+        "memory_gb_free": free.map(gb),
         "uptime_hours": up.map(|s| (s as f64 / 360.0).round() / 10.0),
     })
 }
@@ -179,6 +245,7 @@ mod tests {
     fn system_info_has_basics() {
         let v = system_info();
         assert!(v["os"].is_string());
+        assert!(!v["computer"].as_str().unwrap_or_default().is_empty());
         assert!(v["cpu_threads"].as_u64().unwrap_or(0) >= 1);
     }
 }

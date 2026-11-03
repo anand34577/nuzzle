@@ -41,6 +41,8 @@ pub struct Endpointer {
     announced: bool,
     /// Two cascaded one-pole high-pass stages (input, output) each.
     hp: [(f32, f32); 2],
+    /// Levels of the chunks in the current utterance (to learn from noise that never stops).
+    levels: Vec<f32>,
 }
 
 /// Root-mean-square level of PCM16 bytes, 0..1.
@@ -68,7 +70,19 @@ impl Default for Endpointer {
 
 impl Endpointer {
     pub fn new() -> Self {
-        Self { floor: 0.01, pre: VecDeque::new(), utt: vec![], speech: 0, quiet: 0, active: false, announced: false, hp: [(0.0, 0.0); 2] }
+        Self { floor: 0.01, pre: VecDeque::new(), utt: vec![], speech: 0, quiet: 0, active: false, announced: false, hp: [(0.0, 0.0); 2], levels: vec![] }
+    }
+
+    /// The microphone was closed (muted, or I started talking): drop a half-heard utterance instead of gluing it to
+    /// the next one.
+    pub fn reset(&mut self) -> Vad {
+        let was = self.active && (self.announced || self.speech > 0);
+        self.active = false;
+        self.utt.clear();
+        self.levels.clear();
+        self.pre.clear();
+        (self.speech, self.quiet, self.announced) = (0, 0, false);
+        if was { Vad::Dismissed } else { Vad::Idle }
     }
 
     /// Is an utterance in progress?
@@ -124,6 +138,7 @@ impl Endpointer {
                 self.utt.extend_from_slice(&chunk);
                 self.speech = 1;
                 self.quiet = 0;
+                self.levels = vec![level];
             } else {
                 // Only quiet moments teach us what "quiet" is here.
                 self.floor = (self.floor * 0.95 + level * 0.05).clamp(0.002, 0.08);
@@ -136,13 +151,27 @@ impl Endpointer {
         }
 
         self.utt.extend_from_slice(&chunk);
+        self.levels.push(level);
         if loud {
             self.speech += 1;
             self.quiet = 0;
         } else {
             self.quiet += 1;
         }
-        if self.quiet >= HANGOVER || self.utt.len() > MAX_BYTES {
+        if self.utt.len() > MAX_BYTES {
+            // Nobody talks for 25 s without a pause: a level that never dropped is the room (a fan, music), so learn
+            // it as the new floor and don't send it off as speech.
+            let mut l = std::mem::take(&mut self.levels);
+            l.sort_by(f32::total_cmp);
+            let (low, mid) = (l[l.len() / 10], l[l.len() / 2]);
+            if low > mid * 0.6 {
+                self.floor = (low * 0.9).clamp(0.002, 0.08);
+                self.reset();
+                return Vad::Dismissed;
+            }
+            return self.finish(MIN_SPEECH);
+        }
+        if self.quiet >= HANGOVER {
             return self.finish(MIN_SPEECH);
         }
         if !self.announced && self.speech >= ANNOUNCE_AFTER {
@@ -169,6 +198,7 @@ impl Endpointer {
         self.quiet = 0;
         self.announced = false;
         self.pre.clear();
+        self.levels.clear();
         if speech >= min_speech {
             Vad::Ended(pcm)
         } else if announced || speech > 0 {
@@ -304,13 +334,41 @@ mod tests {
     fn very_long_speech_is_cut_at_the_limit() {
         let mut v = Endpointer::new();
         let mut ended = false;
-        for _ in 0..300 {
-            if matches!(v.push(tone(200.0, 0.3)), Vad::Ended(_)) {
+        // Real speech rises and falls; it is sent on at the limit.
+        for i in 0..300 {
+            if matches!(v.push(tone(200.0, if i % 4 == 0 { 0.06 } else { 0.4 })), Vad::Ended(_)) {
                 ended = true;
                 break;
             }
         }
         assert!(ended);
+    }
+
+    #[test]
+    fn a_steady_noise_that_never_stops_is_learned_not_sent() {
+        let mut v = Endpointer::new();
+        let mut events = vec![];
+        for _ in 0..600 {
+            events.push(v.push(tone(300.0, 0.2)));
+        }
+        assert!(!events.iter().any(|e| matches!(e, Vad::Ended(_))), "a fan is never transcribed");
+        assert!(events.contains(&Vad::Dismissed));
+        assert!(v.floor() > 0.05, "the floor rose to the noise: {}", v.floor());
+        assert!(!v.active(), "and it stays quiet after learning");
+    }
+
+    #[test]
+    fn closing_the_mic_drops_half_an_utterance() {
+        let mut v = Endpointer::new();
+        for _ in 0..3 {
+            v.push(quiet());
+        }
+        for _ in 0..4 {
+            v.push(tone(200.0, 0.4));
+        }
+        assert_eq!(v.reset(), Vad::Dismissed);
+        assert!(!v.active());
+        assert_eq!(v.reset(), Vad::Idle);
     }
 
     #[test]

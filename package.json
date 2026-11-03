@@ -1,12 +1,12 @@
 {
   "name": "companion",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
-    "fetch:llama": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-llama.ps1"
+    "fetch:llama": "node scripts/fetch-llama.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

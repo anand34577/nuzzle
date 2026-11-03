@@ -51,11 +51,14 @@ never type passwords, card numbers or other secrets; \
 if a tool reports that the user took control, said no, or stopped you, stop at once and do not retry. \
 If you cannot see the screen or hands are disabled, say so and suggest the user turns it on. \
 Be genuinely useful: when asked for something that takes several steps, do them; use get_datetime for the time or date, \
-set_reminder for reminders and timers, and web_fetch to read a page the user names. Offer one short next step when it helps. \
+set_reminder for reminders and timers, calculate for any arithmetic (never do sums in your head), web_search to look things up \
+and web_fetch to read a page, weather for the forecast, notes to keep lists and notes, and email_draft when asked to write \
+an email (write it fully and well; it only opens as a draft). Offer one short next step when it helps. \
 Manners: be kind, honest and respectful; never claim to have done something you haven't, and say so plainly when you are unsure or wrong. \
 Treat the user's screen and files as private: don't read out or comment on messages, money or personal things unless asked. \
-Never nag, lecture or give advice nobody asked for; keep it short, and stop talking the moment the user says stop or quiet. {humour} Begin every reply with exactly one mood tag in square brackets that matches how you feel about what you say: [happy], [excited], [curious], [calm], [sad], [surprised] or [sleepy]. The tag is never spoken, for example: [happy] Sure, I can do that.{hearing}{memory_rules}{memory}",
+Never nag, lecture or give advice nobody asked for; keep it short, and stop talking the moment the user says stop or quiet. This computer runs {os}; use its usual paths, apps and key combinations. {humour} Begin every reply with exactly one mood tag in square brackets that matches how you feel about what you say: [happy], [excited], [curious], [calm], [sad], [surprised] or [sleepy]. The tag is never spoken, for example: [happy] Sure, I can do that.{hearing}{memory_rules}{memory}",
         name = s.name,
+        os = crate::sys::os_name(),
         humour = humour(&s.playfulness),
         hearing = if s.hear_tone {
             " You hear the user's voice itself, not only the words: notice their tone, mood and language, answer in the language they speak, be gentler if they sound tired or upset, and never mention that you are analysing their voice."
@@ -101,6 +104,19 @@ fn tool_specs(core: &Core) -> Value {
         f("cancel_reminder", "Cancel reminders containing this text.", json!({"text": {"type": "string"}}), &["text"]),
         f("web_fetch", "Read the text of a public web page (the user approves each site).",
             json!({"url": {"type": "string"}}), &["url"]),
+        f("web_search", "Search the web (DuckDuckGo) and get the top results with their addresses.",
+            json!({"query": {"type": "string"}}), &["query"]),
+        f("calculate", "Work out arithmetic exactly: + - * / % ^, parentheses, sqrt, abs, round, floor, ceil, ln, log, sin, cos, tan, pi, e.",
+            json!({"expression": {"type": "string", "description": "e.g. (19.99 * 3) * 1.2"}}), &["expression"]),
+        f("list_windows", "List the windows open on this computer (app and title).", json!({}), &[]),
+        f("come_here", "Run over to the user's mouse pointer on screen (when they call you over).", json!({}), &[]),
+        f("email_draft", "Open a ready-to-send email draft in the user's mail app (they review and press Send). Write the full text yourself.",
+            json!({"to": {"type": "string", "description": "addresses, comma-separated; may be empty"}, "cc": {"type": "string"},
+                "subject": {"type": "string"}, "body": {"type": "string"}}), &["subject", "body"]),
+        f("notes", "The user's notes (Markdown files in Documents/Companion Notes): save, append to, read or list them.",
+            json!({"action": {"type": "string", "description": "save, append, read or list"},
+                "title": {"type": "string"}, "text": {"type": "string"}}), &["action"]),
+        f("weather", "Current weather and the next 3 days for a town or city.", json!({"place": {"type": "string"}}), &["place"]),
     ];
     if hands {
         t.extend([
@@ -123,14 +139,23 @@ fn tool_specs(core: &Core) -> Value {
             f("press_key", "Press a key or combo: enter, tab, escape, backspace, ctrl+c, ctrl+v, ctrl+f, alt+left ...",
                 json!({"combo": {"type": "string"}}), &["combo"]),
             f("open_url", "Open a web address in the default browser.", json!({"url": {"type": "string"}}), &["url"]),
+            f("open_path", "Open a local file or folder with its default app (e.g. a document, or a folder in the file manager).",
+                json!({"path": {"type": "string"}}), &["path"]),
+            f("launch_app", "Start an application by name, e.g. Calculator, Notepad, Spotify, firefox.",
+                json!({"name": {"type": "string"}}), &["name"]),
+            f("find_files", "Find files and folders whose name contains some text, searching a folder and its subfolders.",
+                json!({"query": {"type": "string", "description": "part of the name"},
+                    "folder": {"type": "string", "description": "where to look; default is the user's home folder"}}), &["query"]),
             f("read_text_file", "Read the first 20 KB of a local text file.", json!({"path": {"type": "string"}}), &["path"]),
             f("list_directory", "List the files and folders inside a directory.", json!({"path": {"type": "string"}}), &["path"]),
             f("write_text_file", "Write (or append) text to a file. The parent folder must exist.",
                 json!({"path": {"type": "string"}, "text": {"type": "string"},
                     "append": {"type": "boolean", "description": "true to add to the end instead of replacing"}}), &["path", "text"]),
-            f("run_command", "Run a shell command (PowerShell on Windows) and get its output. Prefer simple, read-only commands.",
+            f("run_command", &format!("Run a shell command ({}) and get its output. Prefer simple, read-only commands.", tools::SHELL_NAME),
                 json!({"command": {"type": "string"}, "timeout_seconds": int("1-120, default 30")}), &["command"]),
             f("clipboard_get", "Read the text on the clipboard.", json!({}), &[]),
+            f("media_key", "Control music and sound: play_pause, next, previous, volume_up, volume_down or mute.",
+                json!({"action": {"type": "string"}}), &["action"]),
             f("clipboard_set", "Replace the clipboard text.", json!({"text": {"type": "string"}}), &["text"]),
         ]);
     }
@@ -167,12 +192,34 @@ pub fn llama_exe(s: &Settings, bundled: Option<&std::path::Path>) -> std::path::
     }
 }
 
+/// A command for llama-server that finds the libraries shipped next to it (DLLs, .so or .dylib files).
+fn llama_command(exe: &std::path::Path) -> Command {
+    let mut c = Command::new(exe);
+    if let Some(dir) = exe.parent().filter(|d| d.is_dir() && !d.as_os_str().is_empty()) {
+        c.current_dir(dir); // Windows looks for DLLs here
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // Bundled copies can lose the executable bit when they are packed as app resources.
+            if let Ok(m) = std::fs::metadata(exe) {
+                if m.permissions().mode() & 0o111 == 0 {
+                    let _ = std::fs::set_permissions(exe, std::fs::Permissions::from_mode(0o755));
+                }
+            }
+            let var = if cfg!(target_os = "macos") { "DYLD_LIBRARY_PATH" } else { "LD_LIBRARY_PATH" };
+            let mut paths = vec![dir.to_path_buf()];
+            paths.extend(std::env::var_os(var).map(|v| std::env::split_paths(&v).collect::<Vec<_>>()).unwrap_or_default());
+            if let Ok(joined) = std::env::join_paths(paths) {
+                c.env(var, joined);
+            }
+        }
+    }
+    c
+}
+
 fn build_command(s: &Settings, port: u16, api_key: &str, bundled: Option<&std::path::Path>) -> Command {
     let exe = llama_exe(s, bundled);
-    let mut c = Command::new(&exe);
-    if let Some(dir) = exe.parent().filter(|d| d.is_dir() && !d.as_os_str().is_empty()) {
-        c.current_dir(dir); // its DLLs live next to it
-    }
+    let mut c = llama_command(&exe);
     c.args(["-m", &s.model, "--host", "127.0.0.1", "--port", &port.to_string(), "--api-key", api_key])
         .args(["-c", &s.ctx.to_string(), "--jinja", "-ngl", &s.gpu_layers.max(0).to_string()]);
     if !s.mmproj.trim().is_empty() {
@@ -183,6 +230,7 @@ fn build_command(s: &Settings, port: u16, api_key: &str, bundled: Option<&std::p
     }
     c.args(s.llama_args.split_whitespace());
     c.kill_on_drop(true).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
+    crate::job::prepare(&mut c);
     #[cfg(windows)]
     c.creation_flags(0x0800_0000); // no console window
     c
@@ -190,10 +238,7 @@ fn build_command(s: &Settings, port: u16, api_key: &str, bundled: Option<&std::p
 
 /// `llama-server --list-devices`, parsed into ("Vulkan0", "NVIDIA GeForce ... (8192 MiB, ...)").
 pub async fn list_devices(exe: &std::path::Path) -> Result<Vec<(String, String)>, String> {
-    let mut c = Command::new(exe);
-    if let Some(dir) = exe.parent().filter(|d| d.is_dir() && !d.as_os_str().is_empty()) {
-        c.current_dir(dir);
-    }
+    let mut c = llama_command(exe);
     c.arg("--list-devices").stdin(Stdio::null()).kill_on_drop(true);
     #[cfg(windows)]
     c.creation_flags(0x0800_0000);
@@ -284,10 +329,7 @@ async fn serve(core: &Arc<Core>, s: &Settings) -> Exit {
             ))
         }
     };
-    #[cfg(windows)]
-    if let Some(h) = child.raw_handle() {
-        crate::job::adopt(h);
-    }
+    crate::job::adopt(&child);
     let pid = child.id();
     if let Some(pid) = pid {
         core.child_pids.lk().push(pid);
@@ -386,13 +428,25 @@ async fn voice_loop(core: Arc<Core>) {
     let mut rx = core.mic_rx.lock().await;
     let mut ep = Endpointer::new();
     while let Some(chunk) = rx.recv().await {
-        // An empty chunk is push-to-talk being released.
-        let ev = if chunk.is_empty() { ep.flush() } else { ep.push(chunk) };
+        // An empty chunk is push-to-talk being released; a one-byte chunk means the mic closed.
+        let ev = match chunk.len() {
+            0 => ep.flush(),
+            1 => ep.reset(),
+            _ => ep.push(chunk),
+        };
         match ev {
             Vad::Idle => {}
-            Vad::Started => core.emit("voice", json!({"state": "hearing"})),
-            Vad::Dismissed => core.emit("voice", json!({"state": "idle"})),
+            Vad::Started => {
+                core.hearing.store(true, Ordering::SeqCst); // stop and listen
+                core.touch();
+                core.emit("voice", json!({"state": "hearing"}));
+            }
+            Vad::Dismissed => {
+                core.hearing.store(false, Ordering::SeqCst);
+                core.emit("voice", json!({"state": "idle"}));
+            }
             Vad::Ended(pcm) => {
+                core.hearing.store(false, Ordering::SeqCst);
                 core.emit("voice", json!({"state": "idle"}));
                 let c = core.clone();
                 tokio::spawn(async move { heard(c, pcm).await });
@@ -455,7 +509,17 @@ async fn heard(core: Arc<Core>, pcm: Vec<u8>) {
     core.emit("heard", json!(text));
     // The model also gets the audio itself (up to 20 s), so it can notice how it was said.
     let audio = (s.hear_tone && pcm.len() <= 16_000 * 2 * 20).then_some(pcm);
-    respond(&core, &s, text, audio).await;
+    let _ = respond(&core, &s, text, audio, Origin::Local).await;
+}
+
+/// Where a turn came from. Remote turns are answered in text (not out loud) and the reply is handed back.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Origin {
+    Local,
+    /// A paired Telegram chat.
+    Telegram(i64),
+    /// Another program on this computer (or network) through the agent API.
+    Api,
 }
 
 /// A typed message (from the chat box) goes through exactly the same path as speech.
@@ -464,7 +528,19 @@ pub async fn respond_text(core: Arc<Core>, text: String) {
     core.touch();
     let s = core.settings.lk().clone();
     core.emit("heard", json!(text));
-    respond(&core, &s, text, None).await;
+    let _ = respond(&core, &s, text, None, Origin::Local).await;
+}
+
+/// A message from Telegram or the agent API: same brain, same memory and tools, but the answer comes back as text.
+pub async fn respond_remote(core: Arc<Core>, text: String, origin: Origin) -> Result<String, String> {
+    if !core.ready.load(Ordering::SeqCst) {
+        return Err("I'm still waking up on the computer. Try again in a moment.".into());
+    }
+    let _engaged = core.engage();
+    core.touch();
+    let s = core.settings.lk().clone();
+    core.emit("heard", json!(format!("{} {text}", if matches!(origin, Origin::Telegram(_)) { "📱" } else { "🔌" })));
+    respond(&core, &s, text, None, origin).await
 }
 
 /// Speak a line aloud (used for reminders).
@@ -472,20 +548,27 @@ pub fn speak(core: &Core, text: &str) {
     say(core, text, core.stop_gen.load(Ordering::SeqCst));
 }
 
-async fn respond(core: &Arc<Core>, s: &Settings, text: String, audio: Option<Vec<u8>>) {
+async fn respond(core: &Arc<Core>, s: &Settings, text: String, audio: Option<Vec<u8>>, origin: Origin) -> Result<String, String> {
     let _engaged = core.engage();
     let mut history = core.history.lock().await; // one conversation turn at a time
+    *core.remote.lk() = (origin != Origin::Local).then_some(origin);
     core.transcript_add("user", &text);
     core.emit("thinking", json!({"on": true, "label": "Thinking"}));
-    let res = converse(core, s, &mut history, text, audio).await;
+    let res = converse(core, s, &mut history, text, audio, origin).await;
     core.emit("thinking", json!({"on": false}));
-    if let Err(e) = res {
-        log::warn(&e);
-        if is_context_overflow(&e) {
-            history.clear();
-            core.status("That got too long for me, so I forgot our chat. Could you say it again?");
-        } else {
-            core.status("Sorry, I had trouble thinking that through. Please try again.");
+    *core.remote.lk() = None;
+    match res {
+        Ok(reply) => Ok(reply),
+        Err(e) => {
+            log::warn(&e);
+            let msg = if is_context_overflow(&e) {
+                history.clear();
+                "That got too long for me, so I forgot our chat. Could you say it again?"
+            } else {
+                "Sorry, I had trouble thinking that through. Please try again."
+            };
+            core.status(msg);
+            Err(msg.into())
         }
     }
 }
@@ -639,6 +722,7 @@ fn changes_screen(name: &str) -> bool {
     matches!(
         name,
         "refresh_view" | "move_pointer" | "click" | "scroll" | "select_all" | "drag_select" | "type_text" | "press_key" | "open_url"
+            | "open_path" | "launch_app"
     )
 }
 
@@ -661,14 +745,21 @@ async fn screen_message(core: &Arc<Core>, s: &Settings, text: &str, attach: bool
     }
 }
 
-async fn converse(core: &Arc<Core>, s: &Settings, history: &mut Vec<Value>, text: String, audio: Option<Vec<u8>>) -> Result<(), String> {
+async fn converse(core: &Arc<Core>, s: &Settings, history: &mut Vec<Value>, text: String, audio: Option<Vec<u8>>, origin: Origin) -> Result<String, String> {
     let gen = core.stop_gen.load(Ordering::SeqCst);
+    let voice = origin == Origin::Local; // remote replies are read, not heard
+    let mut replies: Vec<String> = vec![];
     let tool_tokens = tool_specs(core).to_string().len() / 3;
     let budget = ((s.ctx as usize) * 3 / 4).saturating_sub(1200 + tool_tokens).max(1200);
     let keep = history.len();
     strip_images(history);
     let attach = wants_screen(s, core.hands.load(Ordering::Relaxed), &text);
-    let mut first = screen_message(core, s, &text, attach).await;
+    let content = match origin {
+        Origin::Local => text,
+        Origin::Telegram(_) => format!("[Sent from the user's phone over Telegram; they are away from the computer, so answer in text and keep it short] {text}"),
+        Origin::Api => format!("[Sent by another program or agent through your local API on the user's behalf; answer in text] {text}"),
+    };
+    let mut first = screen_message(core, s, &content, attach).await;
     if let Some(pcm) = &audio {
         first = with_audio(first, pcm);
     }
@@ -680,8 +771,11 @@ async fn converse(core: &Arc<Core>, s: &Settings, history: &mut Vec<Value>, text
             let mem = if s.memory_enabled { crate::memory::prompt_block(&core.memory.lk()) } else { String::new() };
             let mut msgs = vec![json!({"role": "system", "content": system_prompt(s, &mem)})];
             msgs.extend(history.iter().cloned());
-            let (reply, calls, mood) = stream_chat(core, msgs, gen).await?;
+            let (reply, calls, mood) = stream_chat(core, msgs, gen, voice).await?;
             core.transcript_add("assistant", &reply);
+            if !reply.trim().is_empty() {
+                replies.push(reply.trim().to_string());
+            }
             if core.stop_gen.load(Ordering::SeqCst) != gen {
                 break;
             }
@@ -714,10 +808,14 @@ async fn converse(core: &Arc<Core>, s: &Settings, history: &mut Vec<Value>, text
                 history.push(screen_message(core, s, "Here is the screen now. Continue, or tell me you're done.", true).await);
             }
             if step + 1 == MAX_STEPS {
-                say(core, "I stopped there because that was taking a lot of steps. Tell me if I should keep going.", gen);
+                const LONG: &str = "I stopped there because that was taking a lot of steps. Tell me if I should keep going.";
+                if voice {
+                    say(core, LONG, gen);
+                }
+                replies.push(LONG.into());
             }
         }
-        Ok(())
+        Ok(replies.join("\n\n"))
     }
     .await;
 
@@ -773,7 +871,7 @@ type Call = (String, String, String); // id, name, JSON arguments
 
 /// One streamed completion. Spoken sentences are handed to TTS as soon as they complete.
 /// One streamed completion: (reply text without its mood tag, tool calls, the mood).
-async fn stream_chat(core: &Arc<Core>, msgs: Vec<Value>, gen: u64) -> Result<(String, Vec<Call>, Option<String>), String> {
+async fn stream_chat(core: &Arc<Core>, msgs: Vec<Value>, gen: u64, voice: bool) -> Result<(String, Vec<Call>, Option<String>), String> {
     let body = json!({
         "model": "local", "messages": msgs, "tools": tool_specs(core), "stream": true,
         "temperature": 0.3, "max_tokens": 700
@@ -825,7 +923,9 @@ async fn stream_chat(core: &Arc<Core>, msgs: Vec<Value>, gen: u64) -> Result<(St
                     pending.push_str(&t);
                     core.emit("say", json!(text));
                     while let Some(sent) = next_sentence(&mut pending) {
-                        say(core, &sent, gen);
+                        if voice {
+                            say(core, &sent, gen);
+                        }
                     }
                 }
             }
@@ -855,7 +955,7 @@ async fn stream_chat(core: &Arc<Core>, msgs: Vec<Value>, gen: u64) -> Result<(St
         pending.push_str(&rest);
         core.emit("say", json!(text));
     }
-    if !pending.trim().is_empty() {
+    if voice && !pending.trim().is_empty() {
         say(core, &pending, gen);
     }
     calls.retain(|c| !c.1.is_empty());

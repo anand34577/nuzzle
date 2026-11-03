@@ -2,12 +2,24 @@ const T = window.__TAURI__;
 const invoke = (cmd, args) => T.core.invoke(cmd, args);
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
+const LINUX = !MAC && /Linux/i.test(navigator.userAgent);
 
-const TEXT = ['llama_server', 'model', 'mmproj', 'name', 'playfulness', 'tts_voice', 'tts_lang', 'asr_prompt', 'llama_args', 'coord_mode', 'chat_shortcut', 'ptt_shortcut', 'voice_ref_path'];
-const NUM = ['gpu_layers', 'ctx', 'max_image_width'];
+// Key names in the help text follow the system: Ctrl/Alt here, ⌘/⌥ on a Mac (CommandOrControl is Cmd there).
+if (MAC) {
+  const MAC_KEYS = { Ctrl: '⌘', Alt: '⌥', Shift: '⇧', Win: '⌃' };
+  for (const k of $$('kbd')) if (MAC_KEYS[k.textContent]) k.textContent = MAC_KEYS[k.textContent];
+}
+document.documentElement.dataset.os = MAC ? 'mac' : LINUX ? 'linux' : 'windows';
+
+const TEXT = ['llama_server', 'model', 'mmproj', 'name', 'playfulness', 'tts_voice', 'tts_lang', 'asr_prompt', 'llama_args', 'coord_mode', 'chat_shortcut', 'ptt_shortcut', 'voice_ref_path',
+  'telegram_token', 'agent_api_token'];
+const NUM = ['gpu_layers', 'ctx', 'max_image_width', 'agent_api_port'];
+const CHECKS = ['telegram_enabled', 'agent_api_enabled', 'agent_api_lan'];
 const PATHS = { llama_server: 'exe', model: 'gguf', mmproj: 'mmproj', voice_ref_path: 'wav' };
 const BUILTIN_TOOLS = ['remember', 'forget', 'refresh_view', 'move_pointer', 'click', 'scroll', 'select_all', 'drag_select', 'type_text', 'press_key', 'open_url', 'read_text_file',
-  'list_directory', 'write_text_file', 'run_command', 'clipboard_get', 'clipboard_set', 'web_fetch', 'get_datetime', 'system_info', 'set_reminder', 'list_reminders', 'cancel_reminder'];
+  'list_directory', 'write_text_file', 'run_command', 'clipboard_get', 'clipboard_set', 'web_fetch', 'get_datetime', 'system_info', 'set_reminder', 'list_reminders', 'cancel_reminder',
+  'web_search', 'calculate', 'list_windows', 'open_path', 'launch_app', 'find_files', 'come_here', 'email_draft', 'notes', 'weather', 'media_key'];
 const MANAGED_FLAGS = ['--host', '--port', '--api-key', '-m', '--model', '--mmproj', '--device'];
 
 let current = {};          // last settings known to the backend
@@ -70,10 +82,6 @@ function parseEnv(text) {
   return { value: out };
 }
 const lines = (text) => text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-const mcpCfg = (m) => ({
-  name: m.name.trim(), kind: m.kind, command: m.command.trim(), args: lines(m.argsText),
-  env: parseEnv(m.envText).value || {}, url: m.url.trim(), headers: parseHeaders(m.headersText).value || {}, enabled: !!m.enabled,
-});
 
 function readForm() {
   const s = { ...current };
@@ -83,6 +91,7 @@ function readForm() {
   s.avoid_cursor = $('#avoid_cursor').checked;
   s.hear_tone = $('#hear_tone').checked;
   s.memory_enabled = $('#memory_enabled').checked;
+  for (const k of CHECKS) s[k] = $('#' + k).checked;
   s.devices = [...chosen].sort();
   s.character = character;
   s.approvals = approvals;
@@ -102,6 +111,9 @@ const intRange = (min, max) => (v) => (!Number.isInteger(v) ? 'Enter a whole num
 const RULES = {
   name: (s) => (!s.name ? 'Give me a name.' : [...s.name].length > 40 ? 'Keep it to 40 characters or fewer.' : ''),
   ctx: (s) => intRange(512, 1048576)(s.ctx),
+  agent_api_port: (s) => intRange(1024, 65535)(s.agent_api_port),
+  telegram_token: (s) => (!s.telegram_enabled || /^\d+:[A-Za-z0-9_-]{20,}$/.test(s.telegram_token) ? '' : 'Paste the token from @BotFather (it looks like 123456:ABC-...).'),
+  agent_api_token: (s) => (!s.agent_api_enabled || s.agent_api_token.length >= 16 ? '' : 'Press New token.'),
   gpu_layers: (s) => intRange(0, 999)(s.gpu_layers),
   max_image_width: (s) => intRange(256, 4096)(s.max_image_width),
   tts_voice: (s) => (s.tts_voice ? '' : 'Choose a voice.'),
@@ -113,7 +125,7 @@ const RULES = {
   },
   ptt_shortcut: (s) => (s.listen_mode === 'push' && !s.ptt_shortcut ? 'Push to talk needs a shortcut.'
     : s.ptt_shortcut && s.ptt_shortcut.toLowerCase() === s.chat_shortcut.toLowerCase() ? 'Use a different shortcut from the typing box.' : ''),
-  chat_shortcut: (s) => (/^(commandorcontrol|ctrl|control)\+alt\+space$/i.test(s.chat_shortcut) ? 'Ctrl+Alt+Space is reserved for stopping me.' : ''),
+  chat_shortcut: (s) => (/^(commandorcontrol|ctrl|control|cmd|command)\+alt\+space$/i.test(s.chat_shortcut) ? `${MAC ? '⌘⌥Space' : 'Ctrl+Alt+Space'} is reserved for stopping me.` : ''),
 };
 
 function pathMessage(id, s) {
@@ -145,29 +157,6 @@ function hookErrors() {
     out[i] = e;
   });
   return out;
-}
-
-function mcpErrors() {
-  const seen = new Set();
-  return mcps.map((m) => {
-    const e = {};
-    const name = m.name.trim();
-    if (!/^[a-z0-9_-]{1,24}$/.test(name)) e.name = 'Use 1-24 lowercase letters, digits, - or _.';
-    else if (seen.has(name)) e.name = 'Another server already uses this name.';
-    seen.add(name);
-    if (m.kind === 'http') {
-      try { const u = new URL(m.url.trim()); if (!['http:', 'https:'].includes(u.protocol)) throw 0; }
-      catch { e.url = 'Enter a full web address starting with http:// or https://'; }
-      const ph = parseHeaders(m.headersText);
-      if (ph.error) e.headersText = ph.error;
-    } else {
-      if (!m.command.trim()) e.command = 'Enter the program to run, for example npx or uvx.';
-      if (lines(m.argsText).length > 50) e.argsText = 'That is too many arguments (50 max).';
-      const pe = parseEnv(m.envText);
-      if (pe.error) e.envText = pe.error;
-    }
-    return e;
-  });
 }
 
 function showMsg(fieldEl, m) {
@@ -204,7 +193,7 @@ function refresh() {
 
   const me = mcpErrors();
   $$('.mcp').forEach((el, i) => {
-    for (const f of ['name', 'command', 'argsText', 'envText', 'url', 'headersText']) {
+    for (const f of ['name', 'cmdText', 'extraText']) {
       const text = me[i] && me[i][f];
       showMsg($(`[data-mf="${f}"]`, el), text ? { text, kind: 'err' } : null);
       if (text) errors++;
@@ -361,6 +350,7 @@ function fill(s) {
   $('#hear_tone').checked = s.hear_tone !== false;
   $('#own-voice').open = !!s.voice_ref_path;
   $('#memory_enabled').checked = s.memory_enabled !== false;
+  for (const k of CHECKS) $('#' + k).checked = !!s[k];
   chosen = new Set(s.devices || []);
   character = s.character || 'pip';
   approvals = s.approvals || 'risky';
@@ -385,11 +375,7 @@ $$('input[name="listen_mode"]').forEach((r) => { r.checked = r.value === listenM
     name: w.name, description: w.description, url: w.url,
     headersText: Object.entries(w.headers || {}).map(([k, v]) => `${k}: ${v}`).join('\n'),
   }));
-  mcps = (s.mcp_servers || []).map((m) => ({
-    name: m.name, kind: m.kind || 'stdio', command: m.command || '', argsText: (m.args || []).join('\n'),
-    envText: Object.entries(m.env || {}).map(([k, v]) => `${k}=${v}`).join('\n'), url: m.url || '',
-    headersText: Object.entries(m.headers || {}).map(([k, v]) => `${k}: ${v}`).join('\n'), enabled: m.enabled !== false,
-  }));
+  mcps = (s.mcp_servers || []).map(mcpRow);
   $('#own-llama').open = !!s.llama_server || !llamaInfo.bundled;
   setSizeUi(s.size_pct || 80);
   renderArea();
@@ -528,13 +514,97 @@ $('#mem-clear').onclick = async () => {
 T.event.listen('memory', () => loadMemory());
 
 // ------------------------------------------------------------------ MCP servers
-const MCP_TEMPLATES = {
-  files: { name: 'files', kind: 'stdio', command: 'npx', argsText: '-y\n@modelcontextprotocol/server-filesystem\nC:\\Users\\YourName\\Documents', note: 'Edit the last line to the folder I may use.' },
-  fetch: { name: 'fetch', kind: 'stdio', command: 'uvx', argsText: 'mcp-server-fetch', note: 'Needs uv installed (uvx).' },
-  time: { name: 'time', kind: 'stdio', command: 'uvx', argsText: 'mcp-server-time', note: 'Needs uv installed (uvx).' },
-  blank: { name: '', kind: 'stdio', command: '', argsText: '', note: '' },
-};
-const blankMcp = () => ({ name: '', kind: 'stdio', command: '', argsText: '', envText: '', url: '', headersText: '', enabled: true });
+// Each server is one line: the command to run (exactly as MCP guides print it) or a web address. Keys and tokens
+// go in the optional box under it. Paste a whole "mcpServers" JSON block to add several at once.
+const MCP_TEMPLATES = [
+  { id: 'files', label: 'Files', desc: 'Read and edit files in one folder', cmd: (docs) => `npx -y @modelcontextprotocol/server-filesystem ${quoteArg(docs)}`, note: 'Change the folder at the end if you like. Needs Node.js.' },
+  { id: 'memory', label: 'Knowledge graph', desc: 'Long-term notes as a graph', cmd: () => 'npx -y @modelcontextprotocol/server-memory', note: 'Needs Node.js.' },
+  { id: 'fetch', label: 'Web fetch', desc: 'Read pages as clean text', cmd: () => 'uvx mcp-server-fetch', note: 'Needs uv (uvx).' },
+  { id: 'time', label: 'Time zones', desc: 'Time anywhere, conversions', cmd: () => 'uvx mcp-server-time', note: 'Needs uv (uvx).' },
+  { id: 'git', label: 'Git', desc: 'History and diffs of a repo', cmd: () => 'uvx mcp-server-git', note: 'Needs uv (uvx).' },
+  { id: 'github', label: 'GitHub', desc: 'Issues, PRs, code search', cmd: () => 'https://api.githubcopilot.com/mcp/', env: 'Authorization: Bearer YOUR_GITHUB_TOKEN', note: 'Put your GitHub token in the Keys box.' },
+  { id: 'playwright', label: 'Browser', desc: 'Drive a web browser', cmd: () => 'npx -y @playwright/mcp@latest', note: 'Needs Node.js.' },
+];
+const blankMcp = () => ({ name: '', cmdText: '', extraText: '', enabled: true, showExtra: false });
+
+/** Split a command line into words, keeping "quoted parts" together. */
+function splitCmd(text) {
+  const out = []; let cur = '', q = null, any = false;
+  for (const ch of text.trim()) {
+    if (q) { if (ch === q) q = null; else cur += ch; }
+    else if (ch === '"' || ch === "'") { q = ch; any = true; }
+    else if (/\s/.test(ch)) { if (cur || any) out.push(cur); cur = ''; any = false; }
+    else cur += ch;
+  }
+  if (cur || any) out.push(cur);
+  return out;
+}
+const quoteArg = (a) => (a !== '' && !/[\s"']/.test(a) ? a : a.includes('"') ? `'${a}'` : `"${a}"`);
+const isUrl = (t) => /^https?:\/\//i.test(t.trim());
+
+/** Editor row -> the settings shape the backend keeps. */
+function mcpCfg(m) {
+  const http = isUrl(m.cmdText);
+  const words = http ? [] : splitCmd(m.cmdText);
+  return {
+    name: m.name.trim(), kind: http ? 'http' : 'stdio', command: words[0] || '', args: words.slice(1),
+    env: http ? {} : parseEnv(m.extraText).value || {}, url: http ? m.cmdText.trim() : '',
+    headers: http ? parseHeaders(m.extraText).value || {} : {}, enabled: !!m.enabled,
+  };
+}
+/** Settings -> editor row. */
+function mcpRow(c) {
+  const http = c.kind === 'http';
+  const extra = http ? Object.entries(c.headers || {}).map(([k, v]) => `${k}: ${v}`) : Object.entries(c.env || {}).map(([k, v]) => `${k}=${v}`);
+  return { name: c.name || '', cmdText: http ? c.url || '' : [c.command || '', ...(c.args || [])].filter((x, i) => i > 0 || x).map(quoteArg).join(' '),
+    extraText: extra.join('\n'), enabled: c.enabled !== false, showExtra: extra.length > 0 };
+}
+function mcpErrors() {
+  const seen = new Set();
+  return mcps.map((m) => {
+    const e = {};
+    const name = m.name.trim();
+    if (!/^[a-z0-9_-]{1,24}$/.test(name)) e.name = 'Use 1-24 lowercase letters, digits, - or _.';
+    else if (seen.has(name)) e.name = 'Another server already uses this name.';
+    seen.add(name);
+    if (!m.cmdText.trim()) e.cmdText = 'Enter the command (like npx -y some-server) or a web address.';
+    else if (isUrl(m.cmdText)) {
+      try { new URL(m.cmdText.trim()); } catch { e.cmdText = 'That web address looks incomplete.'; }
+      const ph = parseHeaders(m.extraText); if (ph.error) e.extraText = `${ph.error} (for a web address, write Name: value)`;
+    } else {
+      if (splitCmd(m.cmdText).length > 51) e.cmdText = 'That is too many arguments (50 max).';
+      const pe = parseEnv(m.extraText); if (pe.error) e.extraText = pe.error;
+    }
+    return e;
+  });
+}
+function uniqueName(base) {
+  const clean = (base || 'server').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20) || 'server';
+  let name = clean, n = 2;
+  while (mcps.some((m) => m.name === name)) name = `${clean}${n++}`;
+  return name;
+}
+function addMcp(row, note) {
+  mcps.push({ ...blankMcp(), ...row, name: uniqueName(row.name) });
+  renderMcps(); refresh();
+  if (note) toast(note);
+  const last = $$('.mcp').pop(); if (last) last.scrollIntoView({ block: 'center' });
+}
+
+async function renderGallery() {
+  let docs = '~/Documents';
+  try { docs = (await T.path.documentDir()).replace(/[\\/]+$/, ''); } catch { /* keep the placeholder */ }
+  const g = $('#mcp-gallery');
+  g.innerHTML = '';
+  for (const t of MCP_TEMPLATES) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'mcp-tile';
+    b.innerHTML = '<strong></strong><small></small>';
+    $('strong', b).textContent = t.label; $('small', b).textContent = t.desc;
+    b.onclick = () => addMcp({ name: t.id, cmdText: t.cmd(docs), extraText: t.env || '', showExtra: !!t.env }, t.note);
+    g.appendChild(b);
+  }
+}
 
 function renderMcps() {
   const host = $('#mcps');
@@ -543,39 +613,66 @@ function renderMcps() {
     const el = document.createElement('div');
     el.className = 'mcp';
     el.innerHTML = `<div class="mcp-head">
-        <div class="field" data-mf="name"><label>Name</label><input type="text" maxlength="24" autocomplete="off" spellcheck="false" placeholder="files"><div class="msg"></div></div>
-        <div class="field"><label>Type</label><select data-mkind><option value="stdio">Local program</option><option value="http">Web address</option></select></div>
-        <label class="switch sm"><input type="checkbox" data-men><span class="track"></span><span class="switch-text"><strong>On</strong></span></label>
+        <div class="field mcp-name" data-mf="name"><label>Name</label><input type="text" maxlength="24" autocomplete="off" spellcheck="false" placeholder="files"><div class="msg"></div></div>
         <span class="status" data-mstatus data-state="off"><i></i><span>Not saved</span></span>
+        <label class="switch sm"><input type="checkbox" data-men><span class="track"></span><span class="switch-text"><strong>On</strong></span></label>
+        <button type="button" class="btn ghost sm" data-mextra>Keys</button>
+        <button type="button" class="btn danger sm" data-mdel aria-label="Remove">Remove</button>
       </div>
-      <div class="grid2" data-stdio>
-        <div class="field full" data-mf="command"><label>Command</label><input type="text" autocomplete="off" spellcheck="false" placeholder="npx"><div class="msg"></div></div>
-        <div class="field" data-mf="argsText"><label>Arguments (one per line)</label><textarea spellcheck="false"></textarea><div class="msg"></div></div>
-        <div class="field" data-mf="envText"><label>Environment (KEY=value per line)</label><textarea spellcheck="false"></textarea><div class="msg"></div></div>
-      </div>
-      <div class="grid2" data-http>
-        <div class="field full" data-mf="url"><label>Address</label><input type="text" autocomplete="off" spellcheck="false" placeholder="https://example.com/mcp"><div class="msg"></div></div>
-        <div class="field full" data-mf="headersText"><label>Headers (Name: value per line)</label><textarea spellcheck="false" placeholder="Authorization: Bearer ..."></textarea><div class="msg"></div></div>
-      </div>
-      <div class="mcp-tools" data-mtools></div><div class="mcp-err" data-merr></div>
-      <div class="hook-foot"><button type="button" class="btn danger">Remove</button></div>`;
+      <div class="field full" data-mf="cmdText"><label>Command or web address</label><input type="text" autocomplete="off" spellcheck="false" placeholder="npx -y @modelcontextprotocol/server-memory   or   https://example.com/mcp"><div class="msg"></div></div>
+      <div class="field full" data-mf="extraText" data-mextrabox><label data-mextralabel></label><textarea spellcheck="false"></textarea><div class="msg"></div></div>
+      <div class="mcp-tools" data-mtools></div><div class="mcp-err" data-merr></div>`;
     const bind = (f, sel) => {
       const input = $(`[data-mf="${f}"] ${sel}`, el);
       input.value = m[f];
-      input.addEventListener('input', () => { m[f] = input.value; refresh(); applyMcpStatus(); });
+      input.addEventListener('input', () => { m[f] = input.value; extraLabel(); refresh(); applyMcpStatus(); });
     };
-    bind('name', 'input'); bind('command', 'input'); bind('argsText', 'textarea'); bind('envText', 'textarea'); bind('url', 'input'); bind('headersText', 'textarea');
-    const kind = $('[data-mkind]', el), en = $('[data-men]', el);
-    kind.value = m.kind; en.checked = m.enabled;
-    const vis = () => { $('[data-stdio]', el).hidden = m.kind === 'http'; $('[data-http]', el).hidden = m.kind !== 'http'; };
-    vis();
-    kind.onchange = () => { m.kind = kind.value; vis(); refresh(); };
+    const extraLabel = () => {
+      const http = isUrl(m.cmdText);
+      $('[data-mextralabel]', el).textContent = http ? 'Headers, one per line (Authorization: Bearer ...)' : 'Keys and settings, one per line (API_KEY=...)';
+      $('[data-mextrabox] textarea', el).placeholder = http ? 'Authorization: Bearer ...' : 'API_KEY=...';
+      $('[data-mextrabox]', el).hidden = !m.showExtra;
+    };
+    bind('name', 'input'); bind('cmdText', 'input'); bind('extraText', 'textarea');
+    extraLabel();
+    const en = $('[data-men]', el);
+    en.checked = m.enabled;
     en.onchange = () => { m.enabled = en.checked; refresh(); applyMcpStatus(); };
-    $('.btn.danger', el).onclick = () => { mcps.splice(i, 1); renderMcps(); refresh(); };
+    $('[data-mextra]', el).onclick = () => { m.showExtra = !m.showExtra; extraLabel(); };
+    $('[data-mdel]', el).onclick = () => { mcps.splice(i, 1); renderMcps(); refresh(); };
     host.appendChild(el);
   });
   applyMcpStatus();
 }
+
+/** Import Claude Desktop / Cursor / VS Code style JSON: {"mcpServers": {...}}, {"servers": {...}} or one server. */
+function importMcpJson(text) {
+  let v;
+  try { v = JSON.parse(text); } catch { return { error: "That isn't valid JSON. Copy the whole block, braces included." }; }
+  let map = v.mcpServers || v.servers || (v.mcp && v.mcp.servers) || null;
+  if (!map && (v.command || v.url)) map = { [v.name || 'server']: v };
+  if (!map || typeof map !== 'object') return { error: 'I found no servers in it (expected "mcpServers").' };
+  let n = 0;
+  for (const [name, c] of Object.entries(map)) {
+    if (!c || typeof c !== 'object') continue;
+    const url = c.url || c.serverUrl || '';
+    const cfg = url ? { kind: 'http', url, headers: c.headers || {} } : { kind: 'stdio', command: c.command || '', args: c.args || [], env: c.env || {} };
+    if (!cfg.url && !cfg.command) continue;
+    mcps.push({ ...mcpRow({ name, ...cfg, enabled: c.disabled !== true }), name: uniqueName(name) });
+    n++;
+  }
+  return n ? { added: n } : { error: 'Those entries have no command or url.' };
+}
+$('#mcp-custom').onclick = () => addMcp({ name: 'server', cmdText: '' });
+$('#mcp-paste').onclick = () => { $('#mcp-paste-box').hidden = false; $('#mcp-paste-text').focus(); };
+$('#mcp-paste-cancel').onclick = () => { $('#mcp-paste-box').hidden = true; $('#mcp-paste-msg').textContent = ''; };
+$('#mcp-paste-add').onclick = () => {
+  const r = importMcpJson($('#mcp-paste-text').value);
+  if (r.error) { $('#mcp-paste-msg').textContent = r.error; return; }
+  $('#mcp-paste-text').value = ''; $('#mcp-paste-box').hidden = true; $('#mcp-paste-msg').textContent = '';
+  renderMcps(); refresh();
+  toast(`Added ${r.added} server${r.added === 1 ? '' : 's'}. Press Save to start ${r.added === 1 ? 'it' : 'them'}.`);
+};
 
 /* Live status of each saved server next to its editor row. */
 function applyMcpStatus() {
@@ -601,21 +698,11 @@ async function loadMcpStatus() {
   try { mcpStatus = (await invoke('mcp_status')).servers || []; } catch { mcpStatus = []; }
   applyMcpStatus();
 }
-$('#mcp-template').onchange = () => {
-  const sel = $('#mcp-template'), t = MCP_TEMPLATES[sel.value];
-  sel.value = '';
-  if (!t) return;
-  let name = t.name || 'server', n = 2;
-  while (mcps.some((m) => m.name === name)) name = `${t.name || 'server'}${n++}`;
-  mcps.push({ ...blankMcp(), ...t, name });
-  renderMcps(); refresh();
-  if (t.note) toast(t.note);
-  $$('.mcp').pop().scrollIntoView({ block: 'center' });
-};
 $('#mcp-reload').onclick = async () => {
   if (JSON.stringify(readForm().mcp_servers) !== JSON.stringify(current.mcp_servers || [])) { toast('Save your changes first, then I will restart the servers.'); return; }
   await busy($('#mcp-reload'), 'Restarting...', () => invoke('mcp_reload').catch((e) => toast(String(e), true)));
 };
+renderGallery();
 T.event.listen('mcp', () => loadMcpStatus());
 
 // ------------------------------------------------------------------ roaming area
@@ -733,7 +820,7 @@ T.event.listen('transcript', () => loadChat());
 function fillDevices(sel, names, chosen, fallbackName) {
   sel.innerHTML = '';
   const add = (value, text) => { const o = document.createElement('option'); o.value = value; o.textContent = text; sel.appendChild(o); };
-  add('', fallbackName ? `Windows default (${fallbackName})` : 'Windows default');
+  add('', fallbackName ? `System default (${fallbackName})` : 'System default');
   for (const n of names) add(n, n);
   if (chosen && !names.includes(chosen)) add(chosen, `${chosen} (not connected)`);
   sel.value = chosen || '';
@@ -778,7 +865,10 @@ function accelerator(e) {
   else if (!key && /^Digit\d$/.test(e.code)) key = e.code.slice(5);
   else if (!key && /^F\d{1,2}$/.test(e.code)) key = e.code;
   if (!key) return null;
-  const mods = [e.ctrlKey && 'CommandOrControl', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super'].filter(Boolean);
+  // CommandOrControl is Cmd on a Mac and Ctrl elsewhere, so record whichever of those was really pressed.
+  const mods = MAC
+    ? [e.metaKey && 'CommandOrControl', e.ctrlKey && 'Control', e.altKey && 'Alt', e.shiftKey && 'Shift'].filter(Boolean)
+    : [e.ctrlKey && 'CommandOrControl', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super'].filter(Boolean);
   if (!mods.length && !/^F\d/.test(key)) return null;   // a bare letter would block typing everywhere
   return [...mods, key].join('+');
 }
@@ -955,6 +1045,53 @@ $('#btn-revert').onclick = () => { fill(snap); refresh(); toast('Changes reverte
 $('#add-hook').onclick = () => { hooks.push({ name: '', description: '', url: '', headersText: '' }); renderHooks(); refresh(); $$('.hook').pop().querySelector('input').focus(); };
 for (const id of ['btn-logs', 'btn-logs-2']) $('#' + id).onclick = () => invoke('open_logs').catch((e) => toast(String(e), true));
 $('#btn-quit').onclick = () => invoke('quit');
+
+// ------------------------------------------------------------------ remote: Telegram and the agent API
+function setStatus(el, state, text) { el.dataset.state = state; $('span', el).textContent = text; }
+async function loadRemote() {
+  let r;
+  try { r = await invoke('remote_status'); } catch { return; }
+  const tg = r.telegram;
+  setStatus($('#tg-status'), !tg.enabled ? 'off' : tg.bot ? 'ready' : 'starting', !tg.enabled ? 'Off' : tg.bot ? `@${tg.bot}` : 'Connecting...');
+  const host = $('#tg-chats');
+  host.innerHTML = '';
+  for (const c of tg.chats || []) {
+    const li = document.createElement('li');
+    li.className = 'mem-item';
+    li.innerHTML = '<div class="text"><span class="t"></span><span class="meta">Paired chat</span></div><button type="button" title="Unpair"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>';
+    $('.t', li).textContent = c.name || 'Chat';
+    $('button', li).setAttribute('aria-label', `Unpair ${c.name || 'chat'}`);
+    $('button', li).onclick = () => invoke('telegram_unpair', { id: c.id }).then(loadRemote).catch((e) => toast(String(e), true));
+    host.appendChild(li);
+  }
+  const api = r.api;
+  setStatus($('#api-status'), api.enabled && current.agent_api_enabled ? 'ready' : 'off', api.enabled && current.agent_api_enabled ? `Port ${api.port}` : 'Off');
+  renderApiExample();
+}
+function renderApiExample() {
+  const port = $('#agent_api_port').value || 7457, token = $('#agent_api_token').value || '<token>';
+  $('#api-example').textContent = `curl http://127.0.0.1:${port}/message \\\n  -H "Authorization: Bearer ${token}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"text": "What is on my calendar today?"}'`;
+}
+$('#tg-pair').onclick = async () => {
+  if (!current.telegram_enabled || !current.telegram_token) { toast('Turn Telegram on, paste the bot token and press Save first.', true); return; }
+  const code = await invoke('telegram_pair_code');
+  const el = $('#tg-code');
+  el.hidden = false;
+  el.textContent = `Send this to your bot: /pair ${code}  (valid 10 minutes)`;
+};
+$('#api-new').onclick = async () => { $('#agent_api_token').value = await invoke('new_api_token'); renderApiExample(); refresh(); };
+$('#api-copy').onclick = () => {
+  const t = $('#agent_api_token').value;
+  if (!t) return;
+  navigator.clipboard.writeText(t).then(() => toast('Token copied.'), () => toast("I couldn't copy that.", true));
+};
+$('#agent_api_enabled').addEventListener('change', async () => {
+  if ($('#agent_api_enabled').checked && !$('#agent_api_token').value) { $('#agent_api_token').value = await invoke('new_api_token'); refresh(); }
+  renderApiExample();
+});
+$('#agent_api_port').addEventListener('input', renderApiExample);
+T.event.listen('remote', () => loadRemote());
+$$('[data-privacy]').forEach((b) => { b.onclick = () => invoke('open_privacy', { kind: b.dataset.privacy }).catch((e) => toast(String(e), true)); });
 $('#wc-min').onclick = () => invoke('window_action', { label: 'settings', action: 'minimize' });
 $('#wc-max').onclick = () => invoke('window_action', { label: 'settings', action: 'maximize' });
 $('#wc-close').onclick = () => invoke('window_action', { label: 'settings', action: 'close' });
@@ -990,4 +1127,5 @@ loadMemory();
 loadReminders();
 loadMcpStatus();
 loadChat();
+loadRemote();
 load(true).then(loadDevices).catch((e) => toast("I couldn't load your settings: " + e, true));

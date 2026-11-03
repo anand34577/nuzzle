@@ -26,6 +26,7 @@
     <button role="tab" data-tab="chat" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg><span>Chat</span></button>
     <button role="tab" data-tab="memory" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M6 3h10a2 2 0 0 1 2 2v16l-4-3-4 3-4-3V5a2 2 0 0 1 2-2z"/><path d="M9 8h6M9 12h4"/></svg><span>Memory</span></button>
     <button role="tab" data-tab="tools" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg><span>Tools</span></button>
+    <button role="tab" data-tab="remote" aria-selected="false"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg><span>Remote</span></button>
     <button role="tab" data-tab="voice" aria-selected="false"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Voice &amp; sight</span></button>
     <button role="tab" data-tab="safety" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span>Safety</span></button>
     <button role="tab" data-tab="appearance" aria-selected="false"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg><span>Appearance</span></button>
@@ -207,20 +208,63 @@
       <div class="card">
         <div class="card-head"><h2>Built in</h2></div>
         <ul class="caps">
-          <li><b>Always</b> Screen view, memory, reminders &amp; timers, date &amp; time, system info, read web pages</li>
-          <li><b>With "computer control" on</b> Mouse &amp; keyboard, files (read, list, write), run commands, clipboard, open links</li>
+          <li><b>Always</b> Screen view, memory, reminders &amp; timers, date &amp; time, calculator, system info, open windows, web search, read web pages</li>
+          <li><b>With "computer control" on</b> Mouse &amp; keyboard, files (find, read, list, write), open files, folders and apps, run commands, clipboard, open links</li>
         </ul>
         <p class="hint">Computer control is the hand button on my toolbar. It always starts off.</p>
       </div>
 
       <div class="card">
         <div class="card-head"><h2>MCP servers <span class="count" id="mcp-total"></span></h2>
-          <div class="row"><select id="mcp-template" aria-label="Add from template"><option value="">Add from template...</option><option value="files">Files (filesystem)</option><option value="fetch">Web fetch</option><option value="time">Time</option><option value="blank">Blank server</option></select></div>
+          <div class="row"><button class="btn ghost" id="mcp-paste">Paste config</button><button class="btn ghost" id="mcp-custom">Add custom</button></div>
         </div>
-        <p class="hint">MCP servers are programs (or web services) that offer tools. I show you each tool before first use unless you chose full access.</p>
+        <p class="hint">Extra tools from programs or web services. Pick one below, or paste the <code>mcpServers</code> JSON from any MCP guide. I ask before using each tool the first time.</p>
+        <div class="mcp-gallery" id="mcp-gallery"></div>
+        <div class="mcp-paste" id="mcp-paste-box" hidden>
+          <textarea id="mcp-paste-text" spellcheck="false" placeholder='{ "mcpServers": { "files": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"] } } }'></textarea>
+          <div class="row wrap"><button class="btn primary" id="mcp-paste-add">Add servers</button><button class="btn ghost" id="mcp-paste-cancel">Cancel</button><span class="hint inline" id="mcp-paste-msg"></span></div>
+        </div>
         <div id="mcps"></div>
-        <p class="hint mem-empty" id="mcp-empty">No servers yet. Pick a template above to start.</p>
+        <p class="hint mem-empty" id="mcp-empty">No servers yet. Click one above to add it.</p>
         <div class="row wrap"><button class="btn ghost" id="mcp-reload">Restart servers</button><span id="mcp-note" class="hint inline"></span></div>
+      </div>
+    </section>
+
+    <!-- ========== REMOTE ========== -->
+    <section class="panel" id="panel-remote" role="tabpanel" data-panel="remote" hidden>
+      <h1>Remote</h1>
+      <p class="lead">Talk to me when you're away from the computer, or let other apps and agents ask me things.</p>
+
+      <div class="card">
+        <div class="card-head"><h2>Telegram</h2><span class="status" id="tg-status" data-state="off"><i></i><span>Off</span></span></div>
+        <label class="switch"><input id="telegram_enabled" type="checkbox"><span class="track"></span>
+          <span class="switch-text"><strong>Chat with me on Telegram</strong><small>Messages from your phone reach the same me, with my memory and tools. Risky actions show Allow / No buttons in the chat.</small></span></label>
+        <ol class="steps-mini">
+          <li>In Telegram, open <b>@BotFather</b>, send <code>/newbot</code> and follow the two questions.</li>
+          <li>Paste the token it gives you here, then press <b>Save</b>.</li>
+          <li>Press <b>Pair my phone</b> and send the code to your new bot.</li>
+        </ol>
+        <div class="field full" data-field="telegram_token"><label for="telegram_token">Bot token</label>
+          <input id="telegram_token" type="password" autocomplete="off" spellcheck="false" placeholder="123456789:ABC..."><div class="msg"></div></div>
+        <div class="row wrap"><button class="btn ghost" id="tg-pair">Pair my phone</button><span class="pair-code" id="tg-code" hidden></span></div>
+        <ul id="tg-chats" class="mem-list"></ul>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Agent API</h2><span class="status" id="api-status" data-state="off"><i></i><span>Off</span></span></div>
+        <label class="switch"><input id="agent_api_enabled" type="checkbox"><span class="track"></span>
+          <span class="switch-text"><strong>Let other apps and agents talk to me</strong><small>A small web API for OpenClaw, PicoClaw, n8n, scripts and other agents. Every request needs the token below.</small></span></label>
+        <div class="grid2">
+          <div class="field" data-field="agent_api_port"><label for="agent_api_port">Port</label><input id="agent_api_port" type="number" min="1024" max="65535"><div class="msg"></div></div>
+          <label class="switch"><input id="agent_api_lan" type="checkbox"><span class="track"></span>
+            <span class="switch-text"><strong>Allow other devices on my network</strong><small>Off: only programs on this computer.</small></span></label>
+        </div>
+        <div class="field full" data-field="agent_api_token"><label for="agent_api_token">Token</label>
+          <div class="row"><input id="agent_api_token" type="text" readonly spellcheck="false" placeholder="Press New token"><button class="btn ghost" id="api-new">New token</button><button class="btn ghost" id="api-copy">Copy</button></div><div class="msg"></div></div>
+        <details class="api-help"><summary>How to call it</summary>
+          <pre id="api-example"></pre>
+          <p class="hint">OpenAI-style tools can use <code>POST /v1/chat/completions</code> with model <code>companion</code>. Agents that only speak Telegram can't message another bot, so give them this API instead.</p>
+        </details>
       </div>
     </section>
 
@@ -327,7 +371,24 @@
         <div><kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Space</kbd> stops me instantly from anywhere.</div>
         <div><kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>C</kbd> opens the typing box. Double-click me for the same.</div>
         <div>Moving the mouse yourself while I act takes control back.</div>
-        <div>Closing windows keeps me running in the tray. Right-click the tray icon to quit.</div>
+        <div>Closing windows keeps me running in the tray. The tray icon's menu has Quit.</div>
+      </div>
+      <div class="card os-only mac">
+        <div class="card-head"><h2>macOS permissions</h2></div>
+        <p class="hint">macOS asks once for each of these. If something doesn't work, turn Companion on in the matching list, then quit and reopen me.</p>
+        <div class="row wrap">
+          <button class="btn ghost" data-privacy="microphone">Microphone (hearing you)</button>
+          <button class="btn ghost" data-privacy="screen">Screen Recording (seeing the screen)</button>
+          <button class="btn ghost" data-privacy="accessibility">Accessibility (mouse &amp; keyboard)</button>
+        </div>
+      </div>
+      <div class="card os-only linux">
+        <div class="card-head"><h2>On Linux</h2></div>
+        <ul class="caps">
+          <li><b>Best on X11</b> Under Wayland, desktops limit global shortcuts, screen capture, pointer control and click-through windows, so some of these may not work.</li>
+          <li><b>Clipboard</b> Needs <code>wl-clipboard</code> (Wayland) or <code>xclip</code> (X11) installed.</li>
+          <li><b>Saved tokens</b> Go to your keyring (GNOME Keyring or KWallet). Without one, they stay in the settings file.</li>
+        </ul>
       </div>
     </section>
 

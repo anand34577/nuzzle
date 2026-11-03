@@ -1,6 +1,8 @@
 //! Makes the companion wander along the bottom of the screen and hop onto the top edges of
 //! open windows. It stays put while a conversation is going on, gives way if dragged, and keeps out of the user's
 //! way: never standing on the text caret, the spot last clicked, or the pointer when it rests on him (see `avoid`).
+//! Like a real little creature he falls when you let go of him in mid-air (landing on a window edge or the ground),
+//! runs over when called, and now and then gets the zoomies.
 
 use rand::Rng;
 use serde_json::json;
@@ -38,6 +40,32 @@ fn perches(own_title: &str, area: (i32, i32, i32, i32), min_top: i32) -> Vec<Per
         .collect()
 }
 
+/// Where the feet come down when let go of at (x, y): the top edge of a window right below, or the ground. Returns the
+/// window position to land at and the perch (window top) if it is one.
+fn landing(win: &tauri::WebviewWindow, core: &Core, x: f64, y: f64) -> Option<(f64, Option<i32>)> {
+    let (size, mon) = (win.outer_size().ok()?, win.current_monitor().ok()??);
+    let sf = win.scale_factor().unwrap_or(1.0);
+    let (ww, wh) = (size.width as i32, size.height as i32);
+    let wa = mon.work_area();
+    let mut area = (wa.position.x, wa.position.y, wa.position.x + wa.size.width as i32, wa.position.y + wa.size.height as i32);
+    if let Some(a) = core.settings.lk().roam_area {
+        area = (a.x, a.y, a.x + a.w as i32, a.y + a.h as i32);
+    }
+    let pad = (8.0 * sf) as i32;
+    let ground = f64::from(area.3 - wh + pad);
+    let feet = y as i32 + wh - pad;
+    let centre = x as i32 + ww / 2;
+    let title = win.title().unwrap_or_default();
+    let perch = perches(&title, area, area.1)
+        .into_iter()
+        .filter(|p| p.y >= feet - 2 && centre > p.x + 20 && centre < p.x + p.w - 20)
+        .min_by_key(|p| p.y);
+    Some(match perch {
+        Some(p) if f64::from(p.y - wh + pad) < ground => (f64::from(p.y - wh + pad), Some(p.y)),
+        _ => (ground, None),
+    })
+}
+
 pub fn spawn(core: Arc<Core>) {
     std::thread::spawn(move || run(core));
 }
@@ -53,10 +81,10 @@ fn run(core: Arc<Core>) {
     sleep(Duration::from_millis(600));
 
     // The page only needs to hear when something changed, not 30 times a second.
-    let last_move = std::cell::Cell::new((false, 1, false));
-    let emit_move = |walking: bool, dir: i32, hop: bool| {
-        if last_move.replace((walking, dir, hop)) != (walking, dir, hop) {
-            core.emit("move", json!({"walking": walking, "dir": dir, "hop": hop}))
+    let last_move = std::cell::Cell::new((false, 1, false, false));
+    let emit_move = |walking: bool, dir: i32, hop: bool, run: bool| {
+        if last_move.replace((walking, dir, hop, run)) != (walking, dir, hop, run) {
+            core.emit("move", json!({"walking": walking, "dir": dir, "hop": hop, "run": run}))
         }
     };
 
@@ -80,6 +108,10 @@ fn run(core: Arc<Core>) {
     let mut dodging = false;
     let mut last_cursor = (0.0, 0.0);
     let mut cursor_moved = Instant::now() - Duration::from_secs(60);
+    // Falling after being let go of: (speed in px/s, where the feet land, the perch landed on if any).
+    let mut falling: Option<(f64, f64, Option<i32>)> = None;
+    // Running: to the user when called, or the zoomies.
+    let (mut summoned, mut running) = (false, false);
 
     loop {
         sleep(Duration::from_millis(33));
@@ -105,18 +137,45 @@ fn run(core: Arc<Core>) {
         if dragging && drag_last.elapsed() > Duration::from_millis(350) {
             dragging = false;
             core.emit("drag", json!(false));
+            // Let go of in mid-air: fall to the window edge or ground below.
+            if let Some(f) = landing(&win, &core, x, y) {
+                if f.0 > y + 4.0 {
+                    falling = Some((0.0, f.0, f.1));
+                    core.emit("fall", json!(true));
+                }
+            }
+        }
+        if let Some((vy, target, perch)) = falling.as_mut() {
+            let sf = win.scale_factor().unwrap_or(1.0);
+            *vy += 2600.0 * sf * 0.033;
+            y = (y + *vy * 0.033).min(*target);
+            last_set = (x as i32, y as i32);
+            let _ = win.set_position(PhysicalPosition::new(last_set.0, last_set.1));
+            if y >= *target {
+                core.emit("land", json!({"speed": *vy / sf}));
+                feet_y = *perch;
+                falling = None;
+                paused_until = Instant::now() + Duration::from_secs(4);
+            }
+            continue;
+        }
+        if core.summon.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            summoned = true;
+            dest = None;
+            paused_until = Instant::now();
         }
 
         // Stay exactly where I am while anything is going on (thinking, speaking, hearing, typing, approvals),
         // and for a few seconds after, so I don't wander off mid-conversation.
         let busy = core.is_engaged() || now_ms().saturating_sub(core.last_activity.load(std::sync::atomic::Ordering::Relaxed)) < 5000;
         let parked = !core.roam.load(std::sync::atomic::Ordering::Relaxed) || !win.is_visible().unwrap_or(true);
-        if busy || parked || Instant::now() < paused_until {
+        if !summoned && (busy || parked || Instant::now() < paused_until) {
             dodging = false;
             if walking {
                 walking = false;
                 dest = None;
-                emit_move(false, 1, false);
+                running = false;
+                emit_move(false, 1, false, false);
             }
             continue;
         }
@@ -213,6 +272,15 @@ fn run(core: Arc<Core>) {
             }
         }
 
+        if summoned && dest.is_none() {
+            // Called: run to the ground below the pointer (or stay put if it is already right here).
+            let cx = cursor.map_or(x, |c| c.0 - f64::from(ww) / 2.0).clamp(min_x, max_x);
+            feet_y = None;
+            dest = Some((cx, ground_y));
+            running = true;
+            core.emit("summoned", json!(null));
+        }
+
         if dest.is_none() {
             if Instant::now() < next_decision {
                 continue;
@@ -245,6 +313,8 @@ fn run(core: Arc<Core>) {
                 let tx = (0..10)
                     .map(|_| rng.random_range(min_x..=max_x.max(min_x + 1.0)))
                     .find(|&tx| wide(tx, ground_y));
+                // Now and then, out of nowhere: the zoomies (a quick dash, only when the way is long enough).
+                running = tx.is_some_and(|tx| (tx - x).abs() > 300.0 * scale) && rng.random_bool(0.12);
                 match tx {
                     Some(tx) => dest = Some((tx, ground_y)),
                     None => next_decision = Instant::now() + Duration::from_secs(3),
@@ -259,17 +329,25 @@ fn run(core: Arc<Core>) {
                 dest = None;
                 dodging = false;
                 walking = false;
+                if summoned {
+                    summoned = false;
+                    core.emit("arrived", json!(null));
+                    next_decision = Instant::now() + Duration::from_secs(20); // stay with them a while
+                    paused_until = next_decision;
+                }
+                running = false;
                 next_decision = Instant::now() + Duration::from_secs(rng.random_range(5..14));
-                emit_move(false, 1, false);
+                emit_move(false, 1, false, false);
             } else {
                 let hop = dodging || dy.abs() > 40.0 * scale;
-                let step = (if dodging { 420.0 } else { 150.0 } * scale * 0.033).min(dist);
+                let speed = if dodging { 420.0 } else if running { 400.0 } else { 150.0 };
+                let step = (speed * scale * 0.033).min(dist);
                 x += dx / dist * step;
                 y += dy / dist * step;
                 if !walking {
                     walking = true;
                 }
-                emit_move(true, if dx >= 0.0 { 1 } else { -1 }, hop);
+                emit_move(true, if dx >= 0.0 { 1 } else { -1 }, hop, running);
                 last_set = (x as i32, y as i32);
                 let _ = win.set_position(PhysicalPosition::new(last_set.0, last_set.1));
             }

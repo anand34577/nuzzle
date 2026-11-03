@@ -419,10 +419,15 @@ fn build_input(dev: &cpal::Device, sh: &Arc<Shared>, failed: Arc<AtomicBool>) ->
         // Box-filter downsampler to 16 kHz, collected into ~100 ms chunks.
         let (mut phase, mut sum, mut cnt) = (0u32, 0.0f32, 0u32);
         let mut chunk: Vec<u8> = Vec::with_capacity(3200);
+        let mut was_open = false;
         dev.build_input_stream(
             cfg,
             move |data: &[T], _| {
                 let on = sh.mic_on.load(Ordering::Relaxed);
+                if !on && was_open {
+                    was_open = false;
+                    let _ = sh.mic_tx.try_send(vec![0]); // the mic closed: drop any half-heard sentence
+                }
                 let mut energy = 0.0f32;
                 for frame in data.chunks(ch) {
                     let m = frame.iter().map(|s| s.to_sample::<f32>()).sum::<f32>() / ch as f32;
@@ -444,6 +449,10 @@ fn build_input(dev: &cpal::Device, sh: &Arc<Shared>, failed: Arc<AtomicBool>) ->
 
                 if chunk.len() >= 3200 {
                     let gate_open = on && now_ms() >= sh.speaking_until.load(Ordering::Relaxed);
+                    if was_open && !gate_open {
+                        let _ = sh.mic_tx.try_send(vec![0]);
+                    }
+                    was_open = gate_open;
                     if gate_open {
                         let _ = sh.mic_tx.try_send(std::mem::take(&mut chunk));
                     } else {

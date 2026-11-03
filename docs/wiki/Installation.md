@@ -2,7 +2,9 @@
 
 | Requirement | Details |
 |---|---|
-| Windows | Windows 10 or 11, 64-bit. There is no macOS or Linux build yet. |
+| Windows | Windows 10 or 11, 64-bit. |
+| macOS | macOS 11 or later (Apple silicon or Intel). |
+| Linux | 64-bit, X11 recommended (Debian/Ubuntu `.deb`, Fedora `.rpm`, or the AppImage). |
 | Graphics card | Any GPU with Vulkan support (recent NVIDIA, AMD and Intel cards all have it). 4 GB of video memory or more is comfortable. Without one, set GPU layers to 0 and the model runs on the processor, more slowly. |
 | Disk space | About 1.4 GB for the model, plus the installer. |
 | Microphone | Optional, needed only for voice. |
@@ -26,7 +28,7 @@ llama.cpp is part of the installer, so there is nothing else to install.
 
 ## Build from source
 
-You need Node.js 22, the stable Rust toolchain and PowerShell.
+You need Node.js 22 and the stable Rust toolchain (on Linux also the system libraries listed in the README).
 
 ```powershell
 npm install
@@ -34,6 +36,6 @@ npm run fetch:llama
 npm run build
 ```
 
-`npm run fetch:llama` downloads the pinned llama.cpp release and refuses it if the SHA-256 doesn't match. The installers end up in `src-tauri\target\release\bundle\nsis` and `...\msi`.
+`npm run fetch:llama` downloads the pinned llama.cpp release and refuses it if the SHA-256 doesn't match. The installers end up under `src-tauri/target/release/bundle/` (`nsis` and `msi` on Windows, `dmg` on macOS, `deb`, `rpm` and `appimage` on Linux).
 
 Next: [Getting started](Getting-Started).

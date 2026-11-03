@@ -41,6 +41,19 @@
     <div id="ear" data-state="off" title="" aria-hidden="true"><i></i><i></i><i></i></div>
   </div>
 
+  <!-- Right-click me: little things to do together, and how I'm feeling -->
+  <div id="menu" class="hidden" role="menu" aria-label="Play with me">
+    <div class="needs" aria-hidden="true">
+      <span id="need-food" title="Tummy">🍪</span><span id="need-love" title="Love">♥</span><span id="need-fun" title="Fun">★</span><span id="need-energy" title="Energy">⚡</span>
+    </div>
+    <button role="menuitem" data-act="treat">Give a treat</button>
+    <button role="menuitem" data-act="play">Play / do a trick</button>
+    <button role="menuitem" data-act="come">Come here</button>
+    <button role="menuitem" data-act="nap" id="m-nap">Take a nap</button>
+    <button role="menuitem" data-act="chat">Type to me</button>
+    <button role="menuitem" data-act="settings">Settings</button>
+  </div>
+
   <form id="chat" class="hidden" autocomplete="off">
     <input id="chat-input" type="text" maxlength="2000" placeholder="Type to me..." aria-label="Message">
     <button type="submit" id="chat-send" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 17-3-7z"/></svg></button>
@@ -65,7 +78,7 @@
     <button id="b-key" title="Settings" aria-label="Settings">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.6a7 7 0 0 0-2 1.2l-2.3-.9-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 2 1.2L10 21h4l.6-2.6a7 7 0 0 0 2-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg>
     </button>
-    <button id="b-hide" title="Hide to the tray (right-click the tray icon to quit)" aria-label="Hide to tray">
+    <button id="b-hide" title="Hide (the tray icon brings me back and has Quit)" aria-label="Hide to tray">
       <svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
     </button>
   </div>

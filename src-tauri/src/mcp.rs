@@ -84,6 +84,7 @@ fn command_for(cfg: &McpServerCfg) -> Command {
         c
     };
     c.envs(&cfg.env).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+    crate::job::prepare(&mut c);
     #[cfg(windows)]
     c.creation_flags(0x0800_0000); // no console window
     c
@@ -94,10 +95,7 @@ impl StdioClient {
         let mut child = command_for(cfg)
             .spawn()
             .map_err(|e| format!("I couldn't start '{}' ({e}). Is it installed and on your PATH?", cfg.command))?;
-        #[cfg(windows)]
-        if let Some(h) = child.raw_handle() {
-            crate::job::adopt(h);
-        }
+        crate::job::adopt(&child);
         let stdin = Arc::new(tokio::sync::Mutex::new(child.stdin.take().ok_or("no stdin")?));
         let stdout = child.stdout.take().ok_or("no stdout")?;
         let stderr = child.stderr.take().ok_or("no stderr")?;

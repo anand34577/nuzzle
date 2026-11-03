@@ -165,9 +165,12 @@ const LINES = {
     petted: ['Earth custom detected: head pat. Approved!', 'Zorp zorp!'] },
 };
 
+// Everyone's favourite treat (right-click -> Give a treat).
+const FOODS = { pip: '🍓', mochi: '🐟', bruno: '🍯', zap: '🔋', nimbus: '💧', pebble: '🌱', ember: '🍇', bun: '🥕', axo: '🦐', wisp: '✨', penny: '🐟', cosmo: '🌟' };
+
 function characterMeta(id) {
   const c = CHARACTERS.find((x) => x.id === id) || CHARACTERS[0];
-  return { ...c, ...(LINES[c.id] || {}) };
+  return { food: FOODS[c.id], ...c, ...(LINES[c.id] || {}) };
 }
 
 function characterSvg(id, { forPreview = false } = {}) {

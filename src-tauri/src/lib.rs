@@ -1,6 +1,7 @@
 // Byte-slice decoding below reads clearer with chunks_exact than with as_chunks.
 #![allow(clippy::chunks_exact_to_as_chunks)]
 
+mod agent_api;
 mod audio;
 mod avoid;
 mod brain;
@@ -17,6 +18,7 @@ mod secrets;
 mod settings;
 mod setup;
 mod sys;
+mod telegram;
 mod tools;
 mod vad;
 mod voice;
@@ -117,6 +119,8 @@ pub struct Core {
     engaged: AtomicU32,
     /// The typing box is open.
     pub chatting: AtomicBool,
+    /// The user is speaking to me right now (voice activity detected, utterance not finished).
+    pub hearing: AtomicBool,
     /// Sentences queued for speech and not yet played.
     pub tts_pending: AtomicU32,
     /// Where the user last clicked outside me (physical px) and when: normally the box they are typing in.
@@ -125,6 +129,18 @@ pub struct Core {
     pub voice_ref: Mutex<Option<(String, String)>>,
     /// When the user last pressed on me (so I don't dodge away from someone who is petting or poking me).
     pub last_pet_touch: AtomicU64,
+    /// "Come here": the roaming loop runs over to the pointer.
+    pub summon: AtomicBool,
+    /// Where the conversation turn in progress came from, when it isn't this computer (Telegram, agent API).
+    pub remote: Mutex<Option<brain::Origin>>,
+    /// Wakes the Telegram bot and the agent API when their settings change.
+    pub remote_restart: Notify,
+    /// The Telegram pairing code on show in Settings, and when it was made.
+    pub pair_code: Mutex<Option<(String, Instant)>>,
+    /// The bot's @username once Telegram accepted the token.
+    pub telegram_bot: Mutex<Option<String>>,
+    /// The approval card posted to Telegram (chat, message), so its buttons can be removed once answered.
+    pub tg_approval: Mutex<Option<(i64, i64)>>,
 }
 
 /// Held while a conversation turn is in progress; the companion doesn't wander off until it is dropped.
@@ -181,6 +197,7 @@ impl Core {
     pub fn is_engaged(&self) -> bool {
         self.engaged.load(Ordering::SeqCst) > 0
             || self.chatting.load(Ordering::SeqCst)
+            || self.hearing.load(Ordering::SeqCst)
             || self.tts_pending.load(Ordering::SeqCst) > 0
             || self.ptt_held.load(Ordering::Relaxed)
             || self.acting.load(Ordering::Relaxed)
@@ -214,6 +231,7 @@ impl Core {
             "ptt_shortcut": s.ptt_shortcut,
             "chat_shortcut": s.chat_shortcut,
             "speak_aloud": s.speak_aloud,
+            "platform": std::env::consts::OS,
         })
     }
 
@@ -381,6 +399,21 @@ impl Core {
         self.push_flags();
     }
 
+    /// Save settings changed from the backend side (e.g. a Telegram chat was paired) and tell the settings window.
+    pub fn save_settings_now(&self, s: Settings) -> Result<(), String> {
+        s.save(&self.settings_path).map_err(|e| e.to_string())?;
+        *self.settings.lk() = s;
+        self.emit("settings-changed", json!(null));
+        Ok(())
+    }
+
+    pub fn call_over(&self) {
+        if let Some(w) = self.app.get_webview_window("main") {
+            let _ = w.show();
+        }
+        self.summon.store(true, Ordering::SeqCst);
+    }
+
     pub fn set_roam(&self, on: bool) {
         self.roam.store(on, Ordering::SeqCst);
         if let Some(item) = self.roam_item.lk().as_ref() {
@@ -425,10 +458,7 @@ impl Core {
 
     fn kill_children(&self) {
         for pid in self.child_pids.lk().drain(..) {
-            #[cfg(windows)]
-            let _ = std::process::Command::new("taskkill").args(["/F", "/T", "/PID", &pid.to_string()]).output();
-            #[cfg(not(windows))]
-            let _ = std::process::Command::new("kill").arg(pid.to_string()).output();
+            job::kill_tree(pid);
         }
     }
 }
@@ -624,6 +654,44 @@ fn ui_zoom(app: AppHandle, label: String, pct: u32) -> Result<(), String> {
     w.set_zoom(f64::from(pct) / 100.0).map_err(|e| e.to_string())
 }
 
+/// "Come here!": run over to the pointer (from the pet's menu, the tray, or asked by voice).
+#[tauri::command]
+fn summon(core: State<'_, Arc<Core>>) {
+    core.call_over();
+}
+
+/// Telegram bot and agent API, for Settings -> Remote.
+#[tauri::command]
+fn remote_status(core: State<'_, Arc<Core>>) -> Value {
+    let s = core.settings.lk().clone();
+    json!({
+        "telegram": telegram::status(&core),
+        "api": {"enabled": s.agent_api_enabled, "port": s.agent_api_port, "lan": s.agent_api_lan,
+            "url": format!("http://{}:{}", if s.agent_api_lan { "<this computer's address>" } else { "127.0.0.1" }, s.agent_api_port)},
+    })
+}
+
+#[tauri::command]
+fn telegram_pair_code(core: State<'_, Arc<Core>>) -> String {
+    telegram::new_pair_code(&core)
+}
+
+#[tauri::command]
+fn telegram_unpair(core: State<'_, Arc<Core>>, id: i64) -> Result<(), String> {
+    let mut s = core.settings.lk().clone();
+    s.telegram_chats.retain(|c| c.id != id);
+    core.save_settings_now(s)?;
+    core.emit("remote", json!(null));
+    Ok(())
+}
+
+/// A fresh random token for the agent API (the settings window shows it; saving makes it active).
+#[tauri::command]
+fn new_api_token() -> String {
+    use rand::{distr::Alphanumeric, Rng};
+    rand::rng().sample_iter(Alphanumeric).take(40).map(char::from).collect()
+}
+
 #[tauri::command]
 fn focus_main(app: AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
@@ -728,6 +796,21 @@ async fn scan_models() -> Vec<setup::ModelFile> {
     tokio::task::spawn_blocking(setup::scan_models).await.unwrap_or_default()
 }
 
+/// Open the system page where the user grants a permission (macOS privacy panes; elsewhere nothing is needed).
+#[tauri::command]
+fn open_privacy(kind: String) -> Result<(), String> {
+    let pane = match kind.as_str() {
+        "microphone" => "Privacy_Microphone",
+        "screen" => "Privacy_ScreenCapture",
+        "accessibility" => "Privacy_Accessibility",
+        _ => return Err("Unknown permission.".into()),
+    };
+    if !cfg!(target_os = "macos") {
+        return Err("This system doesn't need that permission.".into());
+    }
+    open::that(format!("x-apple.systempreferences:com.apple.preference.security?{pane}")).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn open_link(url: String) -> Result<(), String> {
     if !setup::link_allowed(&url) {
@@ -798,18 +881,21 @@ fn save_settings(core: State<'_, Arc<Core>>, mut settings: Settings) -> Result<b
     settings.mic_on = core.mic.load(Ordering::SeqCst);
     settings.screen_on = core.screen.load(Ordering::SeqCst);
     settings.voice_variant = core.settings.lk().voice_variant; // changed by "try another voice", not by the form
+    settings.telegram_chats = core.settings.lk().telegram_chats.clone(); // paired from the phone, removed by telegram_unpair
     settings.save(&core.settings_path).map_err(|e| {
         log::warn(&format!("saving settings failed: {e}"));
         format!("I couldn't save your settings ({e}).")
     })?;
     let character = settings.character.clone();
-    let (mcp_changed, server_changed, shortcuts_changed, voice_changed) = {
+    let (mcp_changed, server_changed, shortcuts_changed, voice_changed, remote_changed) = {
         let old = core.settings.lk();
         (
             old.mcp_servers != settings.mcp_servers,
             old.needs_restart(&settings),
             (&old.chat_shortcut, &old.ptt_shortcut, &old.listen_mode) != (&settings.chat_shortcut, &settings.ptt_shortcut, &settings.listen_mode),
             voice::key(&old) != voice::key(&settings),
+            (old.telegram_enabled, &old.telegram_token, old.agent_api_enabled, old.agent_api_port, old.agent_api_lan, &old.agent_api_token)
+                != (settings.telegram_enabled, &settings.telegram_token, settings.agent_api_enabled, settings.agent_api_port, settings.agent_api_lan, &settings.agent_api_token),
         )
     };
     let brain_up = matches!(core.brain.lk()["state"].as_str(), Some("ready" | "loading"));
@@ -819,6 +905,10 @@ fn save_settings(core: State<'_, Arc<Core>>, mut settings: Settings) -> Result<b
     core.apply_size();
     if mcp_changed {
         core.inner().mcp_reload();
+    }
+    if remote_changed {
+        core.remote_restart.notify_waiters();
+        core.emit("remote", json!(null));
     }
     core.audio.use_devices(core.settings.lk().audio_choice());
     core.audio.set_volume(core.settings.lk().volume);
@@ -975,6 +1065,7 @@ fn register_shortcuts(core: &Arc<Core>) -> Option<String> {
 
 fn build_tray(app: &tauri::App, core: &Arc<Core>) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "toggle", "Show / hide companion", true, None::<&str>)?;
+    let come = MenuItem::with_id(app, "come", "Come here!", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings...", true, None::<&str>)?;
     let roam = CheckMenuItem::with_id(app, "roam", "Wander around the screen", true, true, None::<&str>)?;
     let stop = MenuItem::with_id(app, "stop", "Stop everything", true, None::<&str>)?;
@@ -990,16 +1081,18 @@ fn build_tray(app: &tauri::App, core: &Arc<Core>) -> tauri::Result<()> {
     let refs: Vec<&dyn tauri::menu::IsMenuItem<Wry>> = items.iter().map(|(_, i)| i as &dyn tauri::menu::IsMenuItem<Wry>).collect();
     let characters = Submenu::with_items(app, "Character", true, &refs)?;
     *core.char_items.lk() = items;
-    let menu = Menu::with_items(app, &[&show, &settings, &characters, &roam, &stop, &sep, &logs, &quit])?;
+    let menu = Menu::with_items(app, &[&show, &come, &settings, &characters, &roam, &stop, &sep, &logs, &quit])?;
     *core.roam_item.lk() = Some(roam.clone());
 
     let c = core.clone();
     let mut builder = TrayIconBuilder::with_id("main")
         .tooltip("Companion")
         .menu(&menu)
-        .show_menu_on_left_click(false)
+        // Menu-bar icons open their menu on click on a Mac; elsewhere a left click shows or hides the companion.
+        .show_menu_on_left_click(cfg!(target_os = "macos"))
         .on_menu_event(move |app, ev| match ev.id().as_ref() {
             "toggle" => toggle_main(app),
+            "come" => c.call_over(),
             "settings" => show_settings(app),
             "roam" => c.set_roam(roam.is_checked().unwrap_or(true)),
             "stop" => c.stop_everything(),
@@ -1016,6 +1109,9 @@ fn build_tray(app: &tauri::App, core: &Arc<Core>) -> tauri::Result<()> {
             }
         })
         .on_tray_icon_event(|tray, ev| {
+            if cfg!(target_os = "macos") {
+                return;
+            }
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = ev {
                 toggle_main(tray.app_handle());
             }
@@ -1064,7 +1160,7 @@ fn spawn_hit_tester(core: Arc<Core>) {
                 }
                 // A press and release on the character without moving it is a poke (double poke opens the chat).
                 let over_pet = rects.first().is_some_and(|r| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]);
-                let down = left_button_down();
+                let down = avoid::left_button_down();
                 if down && !was_down && over_pet && !core.acting.load(Ordering::Relaxed) {
                     press = Some((Instant::now(), (c.x, c.y), (p.x, p.y)));
                     core.last_pet_touch.store(now_ms(), Ordering::Relaxed);
@@ -1092,17 +1188,6 @@ fn spawn_hit_tester(core: Arc<Core>) {
             }
         }
     });
-}
-
-#[cfg(windows)]
-fn left_button_down() -> bool {
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
-    unsafe { GetAsyncKeyState(i32::from(VK_LBUTTON)) as u16 & 0x8000 != 0 }
-}
-
-#[cfg(not(windows))]
-fn left_button_down() -> bool {
-    false
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1140,6 +1225,11 @@ pub fn run() {
             llama_info,
             ui_zoom,
             focus_main,
+            summon,
+            remote_status,
+            telegram_pair_code,
+            telegram_unpair,
+            new_api_token,
             pick_area,
             cancel_area,
             save_area,
@@ -1156,6 +1246,7 @@ pub fn run() {
             detect_llama,
             scan_models,
             open_link,
+            open_privacy,
             window_action,
             set_chatting,
             voice_next,
@@ -1168,6 +1259,9 @@ pub fn run() {
             test_voice
         ])
         .setup(|app| {
+            // A desktop companion, not a regular app: no Dock icon (the tray menu has everything).
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             let log_dir = app.path().app_log_dir()?;
             log::init(&log_dir);
             log::info("Companion starting");
@@ -1235,10 +1329,17 @@ pub fn run() {
                 transcript: Mutex::new(vec![]),
                 engaged: AtomicU32::new(0),
                 chatting: AtomicBool::new(false),
+                hearing: AtomicBool::new(false),
                 tts_pending: AtomicU32::new(0),
                 click_spot: Mutex::new(None),
                 voice_ref: Mutex::new(None),
                 last_pet_touch: AtomicU64::new(0),
+                summon: AtomicBool::new(false),
+                remote: Mutex::new(None),
+                remote_restart: Notify::new(),
+                pair_code: Mutex::new(None),
+                telegram_bot: Mutex::new(None),
+                tg_approval: Mutex::new(None),
             });
             app.manage(core.clone());
             build_tray(app, &core)?;
@@ -1254,8 +1355,9 @@ pub fn run() {
                 }
             });
             if let Err(e) = reg {
-                log::warn(&format!("could not register Ctrl+Alt+Space: {e}"));
-                core.status("Ctrl+Alt+Space is taken by another app. Use the stop button or the tray menu to stop me.");
+                let keys = if cfg!(target_os = "macos") { "Cmd+Option+Space" } else { "Ctrl+Alt+Space" };
+                log::warn(&format!("could not register {keys}: {e}"));
+                core.status(format!("{keys} is taken by another app. Use the stop button or the tray menu to stop me."));
             }
 
             // Quick typed chat and push-to-talk from anywhere (both configurable).
@@ -1314,6 +1416,8 @@ pub fn run() {
             });
             spawn_hit_tester(core.clone());
             roam::spawn(core.clone());
+            telegram::spawn(core.clone());
+            agent_api::spawn(core.clone());
             tauri::async_runtime::spawn(brain::run(core));
             Ok(())
         })

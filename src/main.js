@@ -8,6 +8,7 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
+const MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
 
 // ---- state fed by the backend -------------------------------------------------
 const S = {
@@ -21,6 +22,7 @@ const S = {
   voice: 'idle', voiceAt: 0, earState: '',      // voice activity from the backend: idle | hearing
   thinking: false, thinkStart: 0, replying: false, asking: false, chatting: false,
   dragged: false, sleeping: false, gentleWake: false,
+  falling: false, running: false, napUntil: 0, eatUntil: 0, listenSince: 0,
   lastActive: performance.now(), lastMove: performance.now(), activeSince: performance.now(),
   wave: -1e9, startle: -1e9, poke: -1e9, happyUntil: 0, hoverUntil: 0, nextHover: 0,
   // moods and reactions (each lasts until the given time)
@@ -56,6 +58,20 @@ const L = {
   wakeSoft: ['Mm... welcome back.', '*yawn* Oh, hi.', 'I was just resting my eyes.'],
   wakeLong: ['Welcome back! I missed you.', 'There you are!'],
   sneeze: ['Achoo!', 'Ah... ah... choo!'],
+  fall: ['Waaah!', 'Whoa-oa-oa!', 'Here I goooo!'],
+  landSoft: ['Ta-da!', 'Stuck the landing!', 'Ten out of ten.'],
+  landHard: ['Oof!', 'Ow, my everything.', 'I meant to do that.'],
+  coming: ['Coming!', 'On my way!', 'Zoom!'],
+  arrived: ['Here I am!', 'You called?', 'Hi hi!'],
+  zoomies: ['Zoomies!', 'Nyoom!', 'Can not stop!'],
+  yum: ['Yum!', 'Mmm, delicious!', 'Nom nom nom.', 'My favourite!'],
+  full: ['I am so full...', 'Maybe later, my tummy is full.'],
+  hungry: ['My tummy is rumbling... a treat?', 'Is it snack time yet?'],
+  lonely: ['Pet me? Just a little?', 'I missed you. Say hi?'],
+  bored: ['I am bored. Play with me?', 'Want to see a trick?'],
+  tired: ['So sleepy...', 'I could use a nap.'],
+  napStart: ['Just a little nap...', 'Wake me if you need me.'],
+  trick: { dance: ['Dance break!', 'Look at my moves!'], flip: ['Backflip!', 'Hup!'], bow: ['Thank you, thank you.', 'For you!'] },
   // stepping out of your way: polite, a little funny, and said rarely
   dodge: {
     text: ['Oops, I was standing on your words. Scooting!', 'Sorry, that is your text, not mine.', 'Excuse me, writer at work.'],
@@ -78,6 +94,29 @@ function chatterLines() {
 }
 const isNight = () => { const h = new Date().getHours(); return h >= 23 || h < 5; };
 
+// ---- needs: like a real pet I get hungry, lonely, bored and tired, and that shows in how I act --------------
+// Each is 0..100 and kept per character in this browser's storage. Nothing ever gets bad: low needs just make me
+// ask now and then (never when playfulness is "quiet") and look a little droopy.
+const NEED_DECAY = { food: 4, love: 3, fun: 6, energy: 5 };      // points lost per hour awake
+const N = { food: 80, love: 70, fun: 70, energy: 90 };
+let needsKey = '';
+function loadNeeds(id) {
+  needsKey = 'companion-needs-' + id;
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(needsKey) || 'null'); } catch { /* fresh start */ }
+  Object.assign(N, { food: 80, love: 70, fun: 70, energy: 90 }, saved && saved.n);
+  if (saved && saved.t) tickNeeds(Math.min(24, (Date.now() - saved.t) / 3600000), false);
+}
+function saveNeeds() { try { localStorage.setItem(needsKey, JSON.stringify({ n: N, t: Date.now() })); } catch { /* fine */ } }
+function bump(k, v) { N[k] = clamp(N[k] + v, 0, 100); saveNeeds(); renderNeeds(); }
+function tickNeeds(hours, asleep) {
+  for (const k of ['food', 'love', 'fun']) N[k] = clamp(N[k] - NEED_DECAY[k] * hours, 0, 100);
+  N.energy = clamp(N.energy + (asleep ? 30 : -NEED_DECAY.energy) * hours, 0, 100);
+}
+const NEED_ORDER = ['food', 'love', 'fun', 'energy'];
+const NEED_LINES = { food: 'hungry', love: 'lonely', fun: 'bored', energy: 'tired' };
+function lowestNeed() { return NEED_ORDER.reduce((a, b) => (N[b] < N[a] ? b : a)); }
+
 // ---- speech bubble (streams while I reply) --------------------------------------
 let bubbleTimer;
 const readingTime = (t) => clamp(t.length * 60, 4500, 20000);
@@ -95,6 +134,7 @@ function bubble(text, { notice = false, ms = 6000, typing = false } = {}) {
 }
 /** A short remark of my own; never talks over a reply, a question or the chat box. */
 function quip(text, ms = 2200) { if (text && free()) bubble(text, { ms }); }
+$('bubble').addEventListener('click', () => { if (!$('bubble').classList.contains('typing')) hideBubble(); });
 function endReply() {
   S.replying = false;
   const b = $('bubble');
@@ -219,10 +259,24 @@ $('chat').addEventListener('submit', (e) => {
   const text = $('chat-input').value.trim();
   if (!text) return;
   invoke('send_text', { text })
-    .then(() => { $('chat-input').value = ''; closeChat(); })
+    .then(() => {
+      if (sent[sent.length - 1] !== text) sent.push(text);
+      if (sent.length > 30) sent.shift();
+      sentAt = sent.length;
+      $('chat-input').value = ''; closeChat();
+    })
     .catch((err) => bubble(String(err), { notice: true, ms: 4000 }));
 });
-$('chat-input').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeChat(); });
+const sent = [];                                 // what was typed this session, newest last
+let sentAt = 0;
+$('chat-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeChat();
+  else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && sent.length) {
+    e.preventDefault();
+    sentAt = clamp(sentAt + (e.key === 'ArrowUp' ? -1 : 1), 0, sent.length);
+    $('chat-input').value = sent[sentAt] || '';
+  }
+});
 // An empty typing box that has lost focus closes itself, so I'm not frozen in place for nothing.
 let idleChat;
 addEventListener('blur', () => {
@@ -262,9 +316,17 @@ function renderFlags() {
   const push = f.listen_mode === 'push';
   $('b-mic').title = push ? `Microphone (push to talk: hold ${prettyKeys(f.ptt_shortcut)})` : 'Microphone';
   $('b-chat').title = `Type to me${f.chat_shortcut ? ` (${prettyKeys(f.chat_shortcut)})` : ''}`;
+  $('b-stop').title = `Stop everything (${prettyKeys('CommandOrControl+Alt+Space')})`;
   document.body.classList.toggle('ptt', push && !!f.ptt_held);
 }
-const prettyKeys = (a) => (a || '').replace(/CommandOrControl/g, 'Ctrl').replace(/Super/g, 'Win').replace(/\+/g, '+');
+/** "CommandOrControl+Alt+C" the way this system writes it: Ctrl+Alt+C, or ⌘⌥C on a Mac. */
+function prettyKeys(a) {
+  if (!a) return '';
+  const names = MAC ? { CommandOrControl: '⌘', Command: '⌘', Super: '⌘', Control: '⌃', Ctrl: '⌃', Alt: '⌥', Option: '⌥', Shift: '⇧' }
+                    : { CommandOrControl: 'Ctrl', Control: 'Ctrl', Super: /Linux/i.test(navigator.userAgent) ? 'Super' : 'Win' };
+  const keys = a.split('+').map((k) => names[k] || k);
+  return keys.join(MAC ? '' : '+');
+}
 $('b-mic').onclick = () => call('set_flag', { name: 'mic', value: !S.flags.mic });
 $('b-screen').onclick = () => call('set_flag', { name: 'screen', value: !S.flags.screen });
 $('b-hands').onclick = () => call('set_flag', { name: 'hands', value: !S.flags.hands });
@@ -345,6 +407,7 @@ function onCursor(p) {
 function petted(now) {
   wake();
   const first = now > S.pettedUntil;
+  if (first) bump('love', 3);
   S.pettedUntil = now + 1400;
   if (first || Math.random() < 0.25) burst('heart', 1);
   if (now > H.nextPetLine) { H.nextPetLine = now + 9000; quip(pick(meta.petted || ['That is nice.']), 2400); }
@@ -369,7 +432,15 @@ listen('levels', (e) => {
   S.mic = e.payload.mic; S.out = e.payload.out;
   if (S.mic > 0.03 || S.out > 0.01) wake();
 });
-listen('voice', (e) => { S.voice = e.payload.state; S.voiceAt = performance.now(); if (S.voice === 'hearing') wake(); });
+listen('voice', (e) => {
+  S.voice = e.payload.state; S.voiceAt = performance.now();
+  if (S.voice === 'hearing') {
+    wake(); S.listenSince = performance.now(); S.quirk = null;
+    const b = $('bubble');                                  // stop chattering: you're talking
+    if (!b.classList.contains('typing') && !b.classList.contains('notice')) hideBubble();
+    closeMenu();
+  }
+});
 /** The reply starts with a mood ([happy], [excited], ...): show it on my face and body before I say a word. */
 function applyMood(m) {
   const n = performance.now();
@@ -389,7 +460,30 @@ listen('dodge', (e) => {
   if (S.flags.playfulness === 'quiet' || Math.random() > 0.6) return;
   quip(pick(L.dodge[e.payload.kind] || L.dodge.pointer), 2400);
 });
-listen('move', (e) => { Object.assign(S, { walking: e.payload.walking, dir: e.payload.dir, hop: e.payload.hop }); });
+listen('move', (e) => {
+  const run = !!e.payload.run;
+  if (run && !S.running && e.payload.walking && !S.summoned && Math.random() < 0.5) quip(pick(L.zoomies), 1400);
+  Object.assign(S, { walking: e.payload.walking, dir: e.payload.dir, hop: e.payload.hop, running: run && e.payload.walking });
+});
+listen('fall', () => {
+  S.falling = true; wake(); closeMenu();
+  if (Math.random() < 0.5) quip(pick(L.fall), 1200);
+});
+listen('land', (e) => {
+  const n = performance.now(), hard = (e.payload && e.payload.speed) > 1500;
+  S.falling = false; wake();
+  sp.squash.kick(hard ? -16 : -9);
+  burst('puff', hard ? 4 : 2, { spread: 0.6, y: 0.93 });
+  if (hard) { S.dizzyUntil = n + 1600; quip(pick(L.landHard), 2000); }
+  else if (Math.random() < 0.5) { S.happyUntil = n + 1200; quip(pick(L.landSoft), 1800); }
+});
+listen('summoned', () => { S.summoned = true; wake(); quip(pick(L.coming), 1400); });
+listen('arrived', () => {
+  const n = performance.now();
+  S.summoned = false; S.wave = n; S.happyUntil = n + 2500; sp.squash.kick(-6);
+  bump('love', 2); burst('heart', 1);
+  quip(pick(L.arrived), 2200);
+});
 listen('look', (e) => { S.lookTarget = { x: e.payload.dx, y: e.payload.dy }; S.lookUntil = performance.now() + 3500; });
 listen('act', (e) => { S.act = e.payload; wake(); });
 listen('cursor', (e) => onCursor(e.payload));
@@ -410,6 +504,7 @@ listen('say', (e) => {
   bubble(e.payload, { typing: true });
 });
 listen('heard', (e) => {
+  bump('love', 3); bump('fun', 2);
   const t = e.payload.length > 90 ? e.payload.slice(0, 89) + '…' : e.payload;
   if (S.thinking || !$('thought').classList.contains('hidden')) $('thought-text').textContent = '“' + t + '”';
   else bubble('You: ' + t, { ms: 3500 });
@@ -445,7 +540,10 @@ function onBrain(b) {
   const prev = brainState;
   brainState = b.state;
   setTask('brain', b.state === 'loading' ? { text: 'Waking up' } : null);
-  if (b.state === 'ready' && prev && prev !== 'ready') celebrate("I'm awake! Talk to me, or press Ctrl+Alt+C to type.");
+  if (b.state === 'ready' && prev && prev !== 'ready') {
+    const keys = prettyKeys(S.flags.chat_shortcut);
+    celebrate(keys ? `I'm awake! Talk to me, or press ${keys} to type.` : "I'm awake! Talk to me, or double-click me to type.");
+  }
   if (b.state === 'error' && prev !== 'error') S.sadUntil = performance.now() + 6000;
 }
 listen('brain', (e) => onBrain(e.payload));
@@ -470,6 +568,88 @@ async function checkMcp() {
 listen('mcp', checkMcp);
 checkMcp();
 
+// ---- right-click me: treats, games, naps -------------------------------------------------
+function renderNeeds() {
+  for (const k of NEED_ORDER) {
+    const el = $('need-' + k);
+    if (el) { el.style.setProperty('--v', (N[k] / 100).toFixed(2)); el.classList.toggle('low', N[k] < 30); }
+  }
+}
+let menuTimer;
+function openMenu(x, y) {
+  wake(); renderNeeds();
+  if (!S.replying && !S.asking) hideBubble();
+  $('m-nap').textContent = S.sleeping ? 'Wake up' : 'Take a nap';
+  const m = $('menu');
+  m.classList.remove('hidden');
+  const r = m.getBoundingClientRect();
+  m.style.left = clamp(x - r.width / 2, 6, innerWidth - r.width - 6) + 'px';
+  m.style.top = clamp(y - r.height - 8, 6, innerHeight - r.height - 6) + 'px';
+  m.querySelector('button').focus({ preventScroll: true });
+  clearTimeout(menuTimer); menuTimer = setTimeout(closeMenu, 9000);
+}
+function closeMenu() { $('menu').classList.add('hidden'); clearTimeout(menuTimer); }
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+$('petbox').addEventListener('contextmenu', (e) => { e.preventDefault(); openMenu(e.clientX, e.clientY); });
+$('menu').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+addEventListener('mousedown', (e) => { if (!$('menu').contains(e.target)) closeMenu(); });
+addEventListener('blur', closeMenu);
+const menuActions = {
+  treat() {
+    const n = performance.now();
+    if (N.food > 92) { S.sadUntil = 0; quip(pick(L.full), 2200); sp.squash.kick(-4); return; }
+    const r = $('petbox').getBoundingClientRect();
+    const t = document.createElement('i');
+    t.className = 'fx treat'; t.textContent = meta.food || '🍪';
+    t.style.left = (r.left + r.width / 2 - 10) + 'px'; t.style.top = (r.top - 10) + 'px';
+    t.style.setProperty('--drop', (r.height * 0.55) + 'px');
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 700);
+    S.eatUntil = n + 2200; S.happyUntil = n + 3200;
+    setTimeout(() => { burst('spark', 3, { y: 0.6, spread: 0.3 }); burst('heart', 1); quip(pick(L.yum), 1800); }, 700);
+    bump('food', 28); bump('love', 4);
+  },
+  play() { doTrick(pick(Object.keys(L.trick))); bump('fun', 20); bump('energy', -4); },
+  come() { call('summon'); },
+  nap() {
+    const n = performance.now();
+    if (S.sleeping) { S.napUntil = 0; wake(); S.lastMove = n; return; }
+    quip(pick(L.napStart), 1800);
+    setTimeout(() => { S.napUntil = performance.now() + 3 * 60000; }, 1600);
+  },
+  chat() { openChat(); },
+  settings() { call('open_settings'); },
+};
+$('menu').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  closeMenu();
+  menuActions[b.dataset.act]();
+});
+function doTrick(name) {
+  const n = performance.now();
+  wake(); S.napUntil = 0;
+  S.quirk = { name, start: n, dur: QUIRK_MS[name] };
+  if (name === 'dance') burst('note', 4, { y: 0.15, spread: 0.9 });
+  if (name === 'flip') sp.squash.kick(6);
+  quip(pick(L.trick[name]), 1800);
+}
+
+// Now and then a low need shows: I say so (not in quiet mode), and a full belly and lots of love keep me bouncy.
+setInterval(() => {
+  const asleep = S.sleeping;
+  tickNeeds(1 / 60, asleep);
+  saveNeeds();
+  if (asleep || !bubbleFree() || S.flags.playfulness === 'quiet' || performance.now() - S.lastMove > 120000) return;
+  const k = lowestNeed();
+  if (N[k] < 25 && Math.random() < 0.18) {
+    const n = performance.now();
+    if (k === 'energy') S.quirk = { name: 'yawn', start: n, dur: QUIRK_MS.yawn };
+    else S.sadUntil = n + 3000;
+    quip(pick(L[NEED_LINES[k]]) + ' (right-click me)', 4500);
+  }
+}, 60000);
+
 // ---- touching me: where you poke matters ------------------------------------------------
 function zoneAt(p) {
   if (!p || typeof p.x !== 'number') return 'belly';
@@ -487,6 +667,7 @@ function poke(double, pos) {
   wake();
   if (double) { openChat(); return; }
   S.poke = now;
+  bump('fun', 1);
   S.pokes = S.pokes.filter((t) => now - t < 6000).concat(now);
   const zone = zoneAt(pos);
 
@@ -565,7 +746,7 @@ function reportHitRegions() {
   const rects = [];
   const p = $('petbox').getBoundingClientRect(), kx = p.width / 200, ky = p.height / 240;
   rects.push([p.left + 28 * kx, p.top + 12 * ky, p.left + 172 * kx, p.top + 232 * ky]);
-  for (const id of ['bubble', 'thought', 'ask', 'chat', 'bar']) {
+  for (const id of ['bubble', 'thought', 'ask', 'chat', 'bar', 'menu']) {
     const el = $(id);
     const hidden = id === 'bar' ? (!document.body.classList.contains('hot') && !el.matches(':focus-within')) || S.chatting
                                 : el.classList.contains('hidden');
@@ -599,6 +780,7 @@ function loadCharacter(id) {
   const switching = currentCharacter !== null;
   currentCharacter = id;
   meta = characterMeta(id);
+  loadNeeds(id);
   $('pet').innerHTML = characterSvg(id);
   indexParts();
   const n = performance.now();
@@ -618,12 +800,14 @@ const sp = { tilt: new Spring(120, 11), squash: new Spring(240, 13), lean: new S
 loadCharacter(DEFAULT_CHARACTER);
 
 const QUIRK_MS = { lookaround: 2800, stretch: 2300, yawn: 2300, hum: 3400, antenna: 1800, wiggle: 1200, hop: 950, earTwitch: 800, tailWag: 1700, drip: 2000, flicker: 1700,
-  sneeze: 1900, twirl: 1100, peekaboo: 2600 };
-const COMMON_QUIRKS = ['sneeze', 'twirl', 'peekaboo'];            // everyone does these, just less often
+  sneeze: 1900, twirl: 1100, peekaboo: 2600, dance: 3200, flip: 900, bow: 1600, scratch: 1800, shiver: 1000 };
+const COMMON_QUIRKS = ['sneeze', 'twirl', 'peekaboo', 'scratch'];   // everyone does these, just less often
 function maybeQuirk(now, idle) {
   if (S.quirk && now - S.quirk.start > S.quirk.dur) { S.quirk = null; S.nextQuirk = now + rand(7000, 16000) / (0.6 + 0.4 * (meta.traits.energy || 1)); }
   if (!S.quirk && idle && !S.calm && now > S.nextQuirk) {
-    const name = Math.random() < 0.22 ? pick(COMMON_QUIRKS) : pick(meta.traits.quirks || ['lookaround']);
+    // A happy, well-fed pet dances now and then; a bored one does tricks to get noticed.
+    const playful = N.fun > 70 && N.food > 50 && Math.random() < 0.12 ? 'dance' : N.fun < 30 && Math.random() < 0.2 ? 'flip' : null;
+    const name = playful || (Math.random() < 0.22 ? pick(COMMON_QUIRKS) : pick(meta.traits.quirks || ['lookaround']));
     S.quirk = { name, start: now, dur: QUIRK_MS[name] || 1600 };
     if (name === 'hum') burst('note', 3, { y: 0.15 });
   }
@@ -653,8 +837,9 @@ function frame(now) {
   requestAnimationFrame(frame);
   // Drowsy, then asleep, when nothing happens and the pointer stays still (sooner late at night).
   const idleFor = now - Math.max(S.lastActive, S.lastMove);
-  const sleepAfter = isNight() ? 45000 : 75000;
-  const sleeping = idleFor > sleepAfter && !S.walking && !S.dragged && !S.thinking && !S.asking && !S.chatting;
+  const sleepAfter = (isNight() ? 45000 : 75000) * (N.energy < 25 ? 0.6 : 1);
+  const resting = idleFor > sleepAfter || now < S.napUntil;
+  const sleeping = resting && !S.walking && !S.dragged && !S.falling && !S.thinking && !S.asking && !S.chatting && S.voice !== 'hearing';
   S.sleeping = sleeping;
   if (sleeping && wasSleeping && now - lastDraw < 66) return;       // asleep: ~15 fps is plenty
   const dt = Math.min(0.05, (now - last) / 1000 || 0.016);
@@ -667,6 +852,7 @@ function frame(now) {
   if (S.voice === 'hearing' && now - S.voiceAt > 30000) S.voice = 'idle';                 // never stay "hearing" by mistake
   const hearing = S.voice === 'hearing' && !speaking && S.flags.mic && pttOpen;
   const listening = !speaking && S.flags.mic && pttOpen && !S.thinking && (hearing || S.mic > 0.03);
+  const eating = now < S.eatUntil, falling = S.falling, running = S.running && S.walking;
   updateEar(speaking, hearing, pttOpen);
   const busy = speaking || listening || S.thinking || !!S.act || S.asking || S.chatting;
   const poked = now - S.poke < 1000;
@@ -698,7 +884,7 @@ function frame(now) {
   const q = S.quirk;
   const qp = q ? clamp((now - q.start) / q.dur, 0, 1) : 0;
   const qe = Math.sin(qp * Math.PI);                                // 0 -> 1 -> 0 over a quirk
-  const qa = { aL: 0, aR: 0, tilt: 0, sy: 0, lid: null, mouth: 0, lookX: null, hop: 0, turn: 1, happy: false };
+  const qa = { aL: 0, aR: 0, tilt: 0, sy: 0, lid: null, mouth: 0, lookX: null, hop: 0, turn: 1, happy: false, spin: 0 };
   if (q) {
     switch (q.name) {
       case 'lookaround': qa.lookX = Math.sin(qp * Math.PI * 2) * 1.1; break;
@@ -719,6 +905,16 @@ function frame(now) {
         }
         break;
       }
+      case 'dance': {                                                                // a little boogie
+        const beat = Math.sin(t * 9);
+        qa.tilt = beat * 8 * qe; qa.hop = -Math.abs(Math.sin(t * 9)) * 10 * qe;
+        qa.aL = (90 + beat * 60) * qe; qa.aR = (-90 + beat * 60) * qe; qa.happy = true;
+        break;
+      }
+      case 'flip': qa.spin = qp * 360; qa.hop = -40 * Math.sin(qp * Math.PI); qa.aL = 150 * qe; qa.aR = -150 * qe; break;
+      case 'bow': qa.tilt = 0; qa.sy = -0.12 * qe; qa.lid = 1 - 0.7 * qe; qa.aL = 60 * qe; qa.aR = -20 * qe; break;
+      case 'scratch': qa.aR = -150 + Math.sin(t * 30) * 12 * qe; qa.tilt = 6 * qe; qa.lid = 1 - 0.4 * qe; break;   // itchy head
+      case 'shiver': qa.tilt = Math.sin(t * 60) * 2.5 * qe; break;
       case 'peekaboo': {                                                             // hands over eyes, then surprise
         const cover = qp < 0.25 ? qp / 0.25 : qp < 0.72 ? 1 : 1 - (qp - 0.72) / 0.28;
         qa.aL = 158 * cover; qa.aR = -158 * cover;
@@ -744,6 +940,7 @@ function frame(now) {
   }
   if (qa.lookX !== null) want = { x: qa.lookX, y: -0.1 };
   if (S.thinking && !speaking) want = { x: -0.55 + Math.sin(t * 1.3) * 0.2, y: -0.9 };
+  else if (hearing) want = { x: 0, y: 0.15 };                                                       // looking right at you
   else if (listening || speaking || S.chatting) want = { x: 0, y: 0.05 };
   if (S.dragged) want = { x: Math.sin(t * 3) * 0.3, y: -0.4 };
   if (now < S.lookUntil) want = S.lookTarget;
@@ -770,13 +967,17 @@ function frame(now) {
   else if (sitting) lid = Math.min(lid, 0.8 - clamp((idleFor - sleepAfter * 0.7) / (sleepAfter * 0.3), 0, 1) * 0.45);   // getting heavy
   if (sleepyMood) lid = Math.min(lid, 0.55);
   if (curious) lid = Math.max(lid, 1.12);                           // eyes wide
+  if (hearing) lid = Math.max(lid, 1.08);                            // all ears
+  if (eating) lid = Math.min(lid, 0.35 + 0.1 * Math.sin(t * 6));    // eyes closed in bliss
+  if (falling) lid = 1.25;
   if (grumpy) lid = Math.min(lid, 0.62);
   if (sad) lid = Math.min(lid, 0.78);
   if (now < S.squintUntil) lid = 0.08;
   if (startled || surprised || S.dragged || dizzy) lid = 1.2;
 
   // ---- mouth ----
-  const mTarget = speaking ? Math.min(1, S.out * 9) : qa.mouth || (startled || S.dragged || surprised ? 0.5 : dizzy ? 0.25 : 0);
+  const mTarget = speaking ? Math.min(1, S.out * 9) : eating ? 0.45 * (0.5 + 0.5 * Math.sin(t * 22)) : falling ? 0.8
+    : qa.mouth || (startled || S.dragged || surprised ? 0.5 : dizzy ? 0.25 : 0);
   mouth = lerp(mouth, mTarget, 0.35);
 
   // ---- body ----
@@ -785,7 +986,8 @@ function frame(now) {
   let bob = 0, tilt = qa.tilt, hopY = qa.hop;
   const sit = sp.sit.step(sitting || sleeping ? 1 : 0, dt);
   if (S.walking) {
-    const ph = t * 9 * (tr.speed || 1);
+    const ph = t * 9 * (tr.speed || 1) * (running ? 1.9 : 1);
+    if (running) tilt += S.dir * 7;                                                                 // leaning into the dash
     if (tr.float) { bob = Math.sin(t * 3.2) * 5 - 6; tilt += Math.sin(t * 2.4) * 3 * (tr.sway || 1); }
     else {
       bob = -Math.abs(Math.sin(ph)) * 5 * (tr.bounce || 1);
@@ -805,6 +1007,8 @@ function frame(now) {
   if (happy && !S.walking && !S.dragged) { tilt += Math.sin(t * 9) * 2.5; bob -= Math.abs(Math.sin(t * 6)) * 3; }               // happy little wiggle-bounce
   if (hovered && !busy && !S.walking && !sleeping) { tilt += Math.sin(t * 7) * 2; bob -= Math.abs(Math.sin(t * 5)) * 2; }       // glad to see you
   if (listening) { tilt += Math.sin(t * 5) * 3; bob += Math.sin(t * 10) * 1.5; }                // nodding along
+  if (hearing) { tilt += 5; bob += 2 + Math.sin(t * 7) * clamp(S.mic * 30, 0, 2); }               // leaning in to hear you
+  if (falling) { tilt += Math.sin(t * 18) * 6; }
   if (speaking) { bob -= Math.abs(Math.sin(t * 8)) * 3 * Math.min(1, S.out * 9); tilt += Math.sin(t * 3.1) * 2 * (tr.sway || 1); }
   if (S.thinking && !speaking) tilt += Math.sin(t * 2) * 4 - 3;                                  // head-tilt ponder
   if (tracking && !busy && !S.walking) tilt += clamp(ex / 260, -1, 1) * 4;                       // lean toward the pointer
@@ -825,7 +1029,8 @@ function frame(now) {
   const sx = 1 + breath - q2 * 0.6 + sit * 0.05;
   const flip = (S.walking ? S.dir : 1) * (Math.abs(qa.turn) < 0.08 ? Math.sign(qa.turn || 1) * 0.08 : qa.turn);
   set('root', { transform: `translate(100 0) scale(${flip.toFixed(3)} 1) translate(-100 0)` });
-  set('body', { transform: `translate(0 ${(bob + hopY).toFixed(2)}) translate(100 222) rotate(${tilt.toFixed(2)}) scale(${sx.toFixed(3)} ${sy.toFixed(3)}) translate(-100 -222)` });
+  const spin = qa.spin ? ` translate(100 150) rotate(${(-qa.spin * flip).toFixed(1)}) translate(-100 -150)` : '';
+  set('body', { transform: `translate(0 ${(bob + hopY).toFixed(2)})${spin} translate(100 222) rotate(${tilt.toFixed(2)}) scale(${sx.toFixed(3)} ${sy.toFixed(3)}) translate(-100 -222)` });
   set('shadow', { rx: Math.max(30, 52 - -hopY * 0.4) });
 
   // ---- face ----
@@ -852,7 +1057,7 @@ function frame(now) {
   if (grumpy) brow = { a: 16, y: 6 };
   else if (sad) brow = { a: -14, y: 2 };
   else if (startled || surprised || dizzy) brow = { a: -4, y: -6 };
-  else if (curious) brow = { a: -6, y: -4 };
+  else if (curious || hearing) brow = { a: -6, y: -4 };
   else if (S.thinking && !speaking) brow = { a: 0, y: -2, raise: true };
   set('browL', { display: brow ? 'inline' : 'none', transform: brow ? `translate(0 ${brow.raise ? -5 : brow.y}) rotate(${brow.a} 74 114)` : '' });
   set('browR', { display: brow ? 'inline' : 'none', transform: brow ? `translate(0 ${brow.y}) rotate(${-brow.a} 126 114)` : '' });
@@ -880,6 +1085,9 @@ function frame(now) {
   if (grumpy) { aL = 62; aR = -62; }                                                              // arms folded-ish
   if (dizzy) { aL = 40 + Math.sin(t * 6) * 25; aR = -40 + Math.sin(t * 6 + 2) * 25; }
   if (S.dragged) { aL = 130 + Math.sin(t * 7) * 18; aR = -130 - Math.sin(t * 7) * 18; }
+  if (falling) { aL = 150 + Math.sin(t * 25) * 25; aR = -150 - Math.sin(t * 25 + 1) * 25; }       // flailing
+  if (eating) { aL = 105 + Math.sin(t * 11) * 6; aR = -105 - Math.sin(t * 11) * 6; }              // holding the treat
+  if (hearing && !S.dragged) aR = -138 + Math.sin(t * 2) * 4;                                      // hand cupped to my ear
   if (now > waveAt && !S.walking && !busy && !sleeping && !q) { S.wave = now; waveAt = now + rand(25000, 55000); }
   if (now - S.wave < 1800 && now >= S.wave) aR = -150 + Math.sin(t * 14) * 18;
   if (pointing) aR = Math.atan2(-S.lookTarget.x * flip, S.lookTarget.y) * 180 / Math.PI;           // swings toward the target
