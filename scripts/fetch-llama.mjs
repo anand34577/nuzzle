@@ -96,8 +96,20 @@ const binDir = path.dirname(server);
 
 fs.mkdirSync(dest, { recursive: true });
 for (const e of fs.readdirSync(dest)) if (e !== 'README.txt') fs.rmSync(path.join(dest, e), { recursive: true, force: true });
+// Linux and macOS ship each library as a link chain (libllama.so -> libllama.so.0 -> libllama.so.0.8.0). The loader
+// asks for the soname (the name with one version number), so copy every real file once, under that name. Copying the
+// links too would make app bundles carry the same 40 MB library three times.
+const sonameOf = (names) => names.find((n) => (n.match(/\.\d+(?=\.|$)/g) || []).length === 1);
+const groups = new Map();                                       // real file -> every name that leads to it
 for (const e of fs.readdirSync(binDir, { withFileTypes: true })) {
-  if (e.isFile() || e.isSymbolicLink()) fs.cpSync(path.join(binDir, e.name), path.join(dest, e.name), { dereference: true });
+  if (!e.isFile() && !e.isSymbolicLink()) continue;
+  const real = fs.realpathSync(path.join(binDir, e.name));
+  if (!fs.statSync(real).isFile()) continue;
+  groups.set(real, [...(groups.get(real) || []), e.name]);
+}
+for (const [real, names] of groups) {
+  const name = names.length > 1 ? sonameOf(names) || path.basename(real) : names[0];
+  fs.copyFileSync(real, path.join(dest, name));
 }
 for (const e of fs.readdirSync(out)) {
   if (/^LICENSE/i.test(e) && !fs.existsSync(path.join(dest, e))) fs.cpSync(path.join(out, e), path.join(dest, e));
