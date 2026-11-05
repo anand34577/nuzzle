@@ -87,8 +87,9 @@ fn is_private_host(host: &str) -> bool {
     if name == "localhost" || name.ends_with(".localhost") || name.ends_with(".local") || name.ends_with(".internal") {
         return true;
     }
-    if h == "::1" || h.starts_with("fe80") || h.starts_with("fc") || h.starts_with("fd") {
-        return true;
+    // Only real IPv6 literals: a site such as fcbarcelona.com or fdic.gov must not look like fc00::/7.
+    if let Ok(v6) = h.parse::<std::net::Ipv6Addr>() {
+        return ip_blocked(IpAddr::V6(v6));
     }
     let o: Vec<u8> = name.split('.').filter_map(|p| p.parse().ok()).collect();
     o.len() == 4
@@ -1341,10 +1342,10 @@ mod tests {
 
     #[test]
     fn private_hosts_are_recognised() {
-        for h in ["localhost", "localhost:8080", "127.0.0.1", "127.0.0.1:9", "10.1.2.3", "192.168.0.5", "172.20.1.1", "169.254.1.1", "nas.local", "[::1]:80", "user@127.0.0.1"] {
+        for h in ["localhost", "localhost:8080", "127.0.0.1", "127.0.0.1:9", "10.1.2.3", "192.168.0.5", "172.20.1.1", "169.254.1.1", "nas.local", "[::1]:80", "user@127.0.0.1", "[fd00::1]:80", "[fe80::1]"] {
             assert!(is_private_host(h), "{h}");
         }
-        for h in ["example.com", "8.8.8.8", "172.32.0.1", "192.169.0.1", "github.com:443"] {
+        for h in ["fcbarcelona.com", "fdic.gov", "fe80.example.com", "example.com","8.8.8.8", "172.32.0.1", "192.169.0.1", "github.com:443"] {
             assert!(!is_private_host(h), "{h}");
         }
     }

@@ -7,7 +7,7 @@
 
 use serde_json::{json, Value};
 use std::{
-    sync::{atomic::Ordering, Arc},
+    sync::{atomic::{AtomicU32, Ordering}, Arc},
     time::{Duration, Instant},
 };
 
@@ -17,9 +17,14 @@ const API: &str = "https://api.telegram.org";
 const PAIR_FOR: Duration = Duration::from_secs(600);
 const LIMIT: usize = 4000; // Telegram allows 4096 characters per message
 
+/// Wrong guesses since the current code was made; after `MAX_GUESSES` the code is thrown away.
+static WRONG_GUESSES: AtomicU32 = AtomicU32::new(0);
+const MAX_GUESSES: u32 = 5;
+
 /// A new six-digit pairing code, valid for ten minutes.
 pub fn new_pair_code(core: &Core) -> String {
     use rand::Rng;
+    WRONG_GUESSES.store(0, Ordering::SeqCst);
     let code = format!("{:06}", rand::rng().random_range(0..1_000_000));
     *core.pair_code.lk() = Some((code.clone(), Instant::now()));
     code
@@ -145,6 +150,8 @@ async fn handle(core: &Arc<Core>, token: &str, u: &Value) {
             let valid = pc.as_ref().is_some_and(|(c, at)| c == code.trim() && at.elapsed() < PAIR_FOR);
             if valid {
                 *pc = None; // one use only
+            } else if pc.is_some() && WRONG_GUESSES.fetch_add(1, Ordering::SeqCst) + 1 >= MAX_GUESSES {
+                *pc = None; // someone is guessing: a six-digit code must not survive a brute-force run
             }
             valid
         };

@@ -2,6 +2,12 @@
 
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+- Telegram pairing: a code is thrown away after 5 wrong guesses, so a six-digit code can't be brute-forced.
+- Sites whose names start with `fc`, `fd` or `fe80` (for example fcbarcelona.com) were wrongly treated as local-network addresses and blocked.
+
 ## [0.3.0] - 2026-11-03
 
 ### Changed
