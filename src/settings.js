@@ -13,12 +13,36 @@ if (MAC) {
 document.documentElement.dataset.os = MAC ? 'mac' : LINUX ? 'linux' : 'windows';
 
 const TEXT = ['llama_server', 'model', 'mmproj', 'name', 'playfulness', 'tts_voice', 'tts_lang', 'asr_prompt', 'llama_args', 'coord_mode', 'chat_shortcut', 'ptt_shortcut', 'voice_ref_path',
-  'telegram_token', 'agent_api_token'];
-const NUM = ['gpu_layers', 'ctx', 'max_image_width', 'agent_api_port'];
-const CHECKS = ['telegram_enabled', 'agent_api_enabled', 'agent_api_lan'];
+  'telegram_token', 'agent_api_token',
+  'llm_provider', 'llm_api_url', 'llm_api_model', 'llm_api_key', 'stt_engine', 'stt_api_url', 'stt_api_model', 'stt_api_key',
+  'tts_engine', 'tts_api_url', 'tts_api_voice', 'tts_api_model', 'tts_api_key', 'speech_python', 'speech_asr_dir', 'speech_tts_dir', 'home_place'];
+const NUM = ['gpu_layers', 'ctx', 'max_image_width', 'agent_api_port', 'speech_port'];
+const CHECKS = ['telegram_enabled', 'agent_api_enabled', 'agent_api_lan', 'llm_api_vision', 'speech_server_auto', 'morning_hello'];
+// Fields that only matter for one choice (data-when="llm_provider=api") show only while that choice is made.
+function showEngineFields() {
+  for (const el of document.querySelectorAll('[data-when]')) {
+    const [id, want] = el.dataset.when.split('=');
+    const sel = document.getElementById(id);
+    el.hidden = !sel || (sel.type === 'checkbox' ? String(sel.checked) : sel.value) !== want;
+  }
+}
+document.addEventListener('change', (e) => { if (e.target && ['llm_provider', 'stt_engine', 'tts_engine', 'speech_server_auto'].includes(e.target.id)) showEngineFields(); });
+// The speech server Nuzzle runs itself: show whether it is up, and why not when it isn't.
+async function loadSpeech() {
+  let st = { state: 'off', detail: '' };
+  try { st = await T.core.invoke('speech_status'); } catch { /* older backend */ }
+  const pill = document.getElementById('speech-state'), detail = document.getElementById('speech-detail');
+  if (!pill) return;
+  pill.textContent = { off: 'Off', starting: 'Starting...', ready: 'Running', error: 'Not running' }[st.state] || st.state;
+  pill.dataset.state = st.state;
+  detail.textContent = st.state === 'error' || st.state === 'starting' ? st.detail : '';
+  detail.hidden = !detail.textContent;
+}
+T.event.listen('speech', loadSpeech);
+addEventListener('DOMContentLoaded', loadSpeech);
 const PATHS = { llama_server: 'exe', model: 'gguf', mmproj: 'mmproj', voice_ref_path: 'wav' };
 const BUILTIN_TOOLS = ['remember', 'forget', 'refresh_view', 'move_pointer', 'click', 'scroll', 'select_all', 'drag_select', 'type_text', 'press_key', 'open_url', 'read_text_file',
-  'list_directory', 'write_text_file', 'run_command', 'clipboard_get', 'clipboard_set', 'web_fetch', 'get_datetime', 'system_info', 'set_reminder', 'list_reminders', 'cancel_reminder',
+  'list_directory', 'write_text_file', 'run_command', 'clipboard_get', 'clipboard_set', 'web_fetch', 'get_datetime', 'system_info', 'set_reminder', 'list_reminders', 'cancel_reminder', 'convert_units', 'random',
   'web_search', 'calculate', 'list_windows', 'open_path', 'launch_app', 'find_files', 'come_here', 'email_draft', 'notes', 'weather', 'media_key'];
 const MANAGED_FLAGS = ['--host', '--port', '--api-key', '-m', '--model', '--mmproj', '--device'];
 
@@ -97,6 +121,16 @@ function readForm() {
   s.hear_tone = $('#hear_tone').checked;
   s.memory_enabled = $('#memory_enabled').checked;
   for (const k of CHECKS) s[k] = $('#' + k).checked;
+  // Running the speech server here means using it: point hearing and speaking at it for the folders given.
+  if (s.speech_server_auto) {
+    const url = `http://127.0.0.1:${s.speech_port || 8765}/v1`;
+    for (const [dir, engine, field] of [['speech_asr_dir', 'stt_engine', 'stt_api_url'], ['speech_tts_dir', 'tts_engine', 'tts_api_url']]) {
+      if (!s[dir]) continue;
+      s[engine] = 'api'; s[field] = url;
+      $('#' + engine).value = 'api'; $('#' + field).value = url;
+    }
+    showEngineFields();
+  }
   s.devices = [...chosen].sort();
   s.character = character;
   s.approvals = approvals;
@@ -366,6 +400,7 @@ function fill(s) {
   $('#own-voice').open = !!s.voice_ref_path;
   $('#memory_enabled').checked = s.memory_enabled !== false;
   for (const k of CHECKS) $('#' + k).checked = !!s[k];
+  showEngineFields();
   chosen = new Set(s.devices || []);
   character = s.character || 'pip';
   approvals = s.approvals || 'risky';
@@ -777,6 +812,10 @@ async function loadReminders() {
     $('.t', li).textContent = r.text;
     const mins = Math.max(0, Math.round((r.due - now) / 60));
     $('.meta', li).textContent = mins < 1 ? 'in under a minute' : mins < 90 ? `in ${mins} min` : `at ${new Date(r.due * 1000).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })}`;
+    if (r.every) {                                            // a repeating reminder says how often
+      const m = Math.round(r.every / 60);
+      $('.meta', li).textContent += ` · repeats every ${m % 1440 === 0 ? (m === 1440 ? 'day' : m / 1440 + ' days') : m % 60 === 0 ? (m === 60 ? 'hour' : m / 60 + ' hours') : m + ' min'}`;
+    }
     const b = $('button', li);
     b.setAttribute('aria-label', 'Cancel reminder: ' + r.text); b.title = 'Cancel this reminder';
     b.onclick = () => invoke('delete_reminder', { id: r.id }).catch((e) => toast(String(e), true));

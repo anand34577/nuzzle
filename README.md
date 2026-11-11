@@ -3,7 +3,7 @@
 </picture>
 
 [![Build](https://github.com/anand34577/nuzzle/actions/workflows/build.yml/badge.svg)](https://github.com/anand34577/nuzzle/actions/workflows/build.yml)
-![Version](https://img.shields.io/badge/version-0.3.0-5a4bd1)
+![Version](https://img.shields.io/badge/version-0.4.0-5a4bd1)
 ![License](https://img.shields.io/badge/license-Apache--2.0-5a4bd1)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-444)
 
@@ -29,6 +29,12 @@ mid-range GPU, and everything stays local.
 - Controls the mouse, keyboard, files and shell, only when computer control is on, and asks before anything risky.
 - Remembers facts you tell it, sets reminders and timers, searches the web, checks the weather, keeps notes and drafts
   emails for you to send.
+- Quick commands that need no model at all: `/timer 10m tea`, `/remind every 1h drink water`, `/note buy milk`,
+  `/calc`, `/convert 5 km to miles`, `/roll 2d6`. Type `/help` to see them. They work while the model is still
+  downloading or loading, and from Telegram and the agent API too.
+- Bring your own brain and voice: think with any OpenAI-compatible chat service instead of the local model, and hear
+  and speak through your own speech servers (Settings -> Advanced). `scripts/speech-server.py` runs Hima-ASR and
+  Paradee locally for that. With a service on the internet, what you say, type and show is sent to it.
 - Acts like a little pet: right-click it to give a treat, play or send it for a nap; drop it and it falls; call it and it
   runs over. It gets hungry, lonely and bored if ignored (gently, never annoyingly).
 - Chat with it from your phone over Telegram, and let other agents (OpenClaw, PicoClaw, scripts) talk to it through a

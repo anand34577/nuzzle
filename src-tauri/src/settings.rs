@@ -9,7 +9,7 @@ use std::{
 static STORED: std::sync::Mutex<std::collections::BTreeSet<String>> = std::sync::Mutex::new(std::collections::BTreeSet::new());
 
 /// Tool names the model already has; a connector may not reuse them.
-pub const BUILTIN_TOOLS: [&str; 34] = [
+pub const BUILTIN_TOOLS: [&str; 36] = [
     "remember",
     "forget",
     "refresh_view",
@@ -44,6 +44,8 @@ pub const BUILTIN_TOOLS: [&str; 34] = [
     "notes",
     "weather",
     "media_key",
+    "convert_units",
+    "random",
 ];
 
 /// Layout of the companion window, in CSS pixels at normal zoom. Only the character scales with `size_pct`; the
@@ -240,6 +242,42 @@ pub struct Settings {
     /// Listen on the local network too (not only this computer). The token is always required.
     pub agent_api_lan: bool,
     pub agent_api_token: String,
+
+    /// Where I think: "local" (llama-server on this computer) or "api" (any OpenAI-compatible chat service).
+    pub llm_provider: String,
+    /// Base address of the service, e.g. https://api.openai.com/v1 or http://localhost:11434/v1.
+    pub llm_api_url: String,
+    pub llm_api_key: String,
+    pub llm_api_model: String,
+    /// The API model can look at pictures (screenshots are sent to it).
+    pub llm_api_vision: bool,
+    /// How I hear: "model" (the local omni model) or "api" (an OpenAI-style /audio/transcriptions endpoint).
+    pub stt_engine: String,
+    pub stt_api_url: String,
+    pub stt_api_key: String,
+    pub stt_api_model: String,
+    /// How I speak: "model" (the local omni model) or "api" (an OpenAI-style /audio/speech endpoint).
+    pub tts_engine: String,
+    pub tts_api_url: String,
+    pub tts_api_key: String,
+    pub tts_api_model: String,
+    pub tts_api_voice: String,
+
+    /// Run the bundled speech server (Hima-ASR + Paradee) while the app is open. See `speech.rs`.
+    pub speech_server_auto: bool,
+    /// The Python to run it with; empty = `python` on PATH.
+    pub speech_python: String,
+    /// Folders holding the Hima-ASR ONNX model and the Paradee model; an empty one leaves that half out.
+    pub speech_asr_dir: String,
+    pub speech_tts_dir: String,
+    pub speech_port: u16,
+
+    /// Say good morning with today's reminders and the weather, once a day.
+    pub morning_hello: bool,
+    /// Town or city for the weather in the morning hello and `/weather`.
+    pub home_place: String,
+    /// The last day (YYYY-MM-DD) the morning hello was said.
+    pub hello_day: String,
 }
 
 impl Default for Settings {
@@ -288,6 +326,28 @@ impl Default for Settings {
             agent_api_port: 7457,
             agent_api_lan: false,
             agent_api_token: String::new(),
+            llm_provider: "local".into(),
+            llm_api_url: String::new(),
+            llm_api_key: String::new(),
+            llm_api_model: String::new(),
+            llm_api_vision: true,
+            stt_engine: "model".into(),
+            stt_api_url: String::new(),
+            stt_api_key: String::new(),
+            stt_api_model: String::new(),
+            tts_engine: "model".into(),
+            tts_api_url: String::new(),
+            tts_api_key: String::new(),
+            tts_api_model: String::new(),
+            tts_api_voice: String::new(),
+            speech_server_auto: false,
+            speech_python: String::new(),
+            speech_asr_dir: String::new(),
+            speech_tts_dir: String::new(),
+            speech_port: 8765,
+            morning_hello: true,
+            home_place: String::new(),
+            hello_day: String::new(),
         }
     }
 }
@@ -434,6 +494,24 @@ impl Settings {
             || self.gpu_layers != new.gpu_layers
             || self.ctx != new.ctx
             || self.llama_args != new.llama_args
+            || self.llm_provider != new.llm_provider
+            || self.stt_engine != new.stt_engine
+            || self.tts_engine != new.tts_engine
+    }
+
+    /// I think with a chat service instead of the local model.
+    pub fn llm_is_api(&self) -> bool {
+        self.llm_provider == "api"
+    }
+
+    /// Something still needs llama-server on this computer (thinking, hearing or speaking), and there is a model for it.
+    pub fn runs_local_server(&self) -> bool {
+        !self.model.trim().is_empty() && (!self.llm_is_api() || self.stt_engine == "model" || self.tts_engine == "model")
+    }
+
+    /// There is a brain to wake: a local model or a chat service.
+    pub fn configured(&self) -> bool {
+        !self.model.trim().is_empty() || self.llm_is_api()
     }
 
     /// Human-readable reason the settings can't be used, if any.
@@ -530,6 +608,52 @@ impl Settings {
         }
         if self.agent_api_enabled && self.agent_api_token.trim().len() < 16 {
             return Err("Agent API needs a token (press New token).".into());
+        }
+        let web = |u: &str| (u.starts_with("http://") || u.starts_with("https://")) && u.len() <= 300 && !u.contains(char::is_whitespace);
+        if !["local", "api"].contains(&self.llm_provider.as_str()) {
+            return Err("Unknown brain type.".into());
+        }
+        if self.llm_is_api() {
+            if !web(self.llm_api_url.trim()) {
+                return Err("Chat service: enter its address, such as https://api.openai.com/v1 or http://localhost:11434/v1.".into());
+            }
+            if self.llm_api_model.trim().is_empty() || self.llm_api_model.len() > 120 {
+                return Err("Chat service: enter the model's name, such as gpt-4o-mini or llama3.2.".into());
+            }
+        }
+        for (label, engine, url) in [("Speech-to-text", &self.stt_engine, &self.stt_api_url), ("Text-to-speech", &self.tts_engine, &self.tts_api_url)] {
+            if !["model", "api"].contains(&engine.as_str()) {
+                return Err(format!("{label}: unknown engine."));
+            }
+            if engine == "api" && !web(url.trim()) {
+                return Err(format!("{label}: enter the server's address, such as http://127.0.0.1:8765/v1."));
+            }
+        }
+        if [&self.llm_api_key, &self.stt_api_key, &self.tts_api_key, &self.stt_api_model, &self.tts_api_model, &self.tts_api_voice].iter().any(|v| v.len() > 300) {
+            return Err("One of the service keys or names is too long.".into());
+        }
+        if self.home_place.chars().count() > 100 || self.hello_day.len() > 10 {
+            return Err("That town name is too long.".into());
+        }
+        if self.speech_port < 1024 {
+            return Err("Speech server port must be between 1024 and 65535.".into());
+        }
+        if self.speech_python.len() > 300 {
+            return Err("The Python path is too long.".into());
+        }
+        if self.speech_server_auto {
+            if self.speech_asr_dir.trim().is_empty() && self.speech_tts_dir.trim().is_empty() {
+                return Err("Speech server: enter the Hima-ASR folder, the Paradee folder, or both.".into());
+            }
+            for (label, dir, file) in [("Hima-ASR", &self.speech_asr_dir, "tokenizer.json"), ("Paradee", &self.speech_tts_dir, "config.json")] {
+                let d = dir.trim();
+                if !d.is_empty() && !Path::new(d).join(file).is_file() {
+                    return Err(format!("Speech server: '{d}' doesn't look like the {label} model folder (no {file} in it)."));
+                }
+            }
+            if self.agent_api_enabled && self.agent_api_port == self.speech_port {
+                return Err("The speech server and the agent API need different ports.".into());
+            }
         }
         let mut seen = std::collections::HashSet::new();
         for w in &self.webhooks {
@@ -638,6 +762,27 @@ mod tests {
         assert!(a.needs_restart(&Settings { ctx: 4096, ..Settings::default() }));
         assert!(a.needs_restart(&Settings { devices: vec!["Vulkan1".into()], ..Settings::default() }));
         assert!(a.needs_restart(&Settings { llama_args: String::new(), ..Settings::default() }));
+    }
+
+    #[test]
+    fn chat_service_and_speech_engines_are_validated() {
+        let api = Settings { llm_provider: "api".into(), ..Settings::default() };
+        assert!(api.validate().is_err(), "needs an address and a model");
+        let ok = Settings { llm_api_url: "http://localhost:11434/v1".into(), llm_api_model: "llama3.2".into(), ..api.clone() };
+        assert!(ok.validate().is_ok());
+        assert!(ok.configured() && !ok.runs_local_server(), "no local model: nothing to run here");
+        assert!(Settings::default().needs_restart(&ok));
+        assert!(Settings { llm_api_url: "ftp://x".into(), ..ok.clone() }.validate().is_err());
+        assert!(Settings { tts_engine: "api".into(), ..Settings::default() }.validate().is_err());
+        assert!(Settings { tts_engine: "api".into(), tts_api_url: "http://127.0.0.1:8765/v1".into(), ..Settings::default() }.validate().is_ok());
+        assert!(Settings { stt_engine: "magic".into(), ..Settings::default() }.validate().is_err());
+        assert!(!Settings::default().configured());
+        let auto = Settings { speech_server_auto: true, ..Settings::default() };
+        assert!(auto.validate().is_err(), "needs a model folder");
+        assert!(Settings { speech_asr_dir: "C:/definitely/not/here".into(), ..auto }.validate().is_err());
+        // An old settings file has none of these fields and stays fully local.
+        let old: Settings = serde_json::from_str(r#"{"name":"Pip"}"#).unwrap();
+        assert_eq!((old.llm_provider.as_str(), old.stt_engine.as_str(), old.tts_engine.as_str()), ("local", "model", "model"));
     }
 
     #[test]

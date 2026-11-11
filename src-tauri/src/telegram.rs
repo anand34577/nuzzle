@@ -7,7 +7,7 @@
 
 use serde_json::{json, Value};
 use std::{
-    sync::{atomic::Ordering, Arc},
+    sync::{atomic::{AtomicU32, Ordering}, Arc},
     time::{Duration, Instant},
 };
 
@@ -17,9 +17,14 @@ const API: &str = "https://api.telegram.org";
 const PAIR_FOR: Duration = Duration::from_secs(600);
 const LIMIT: usize = 4000; // Telegram allows 4096 characters per message
 
+/// Wrong guesses since the current code was made; after `MAX_GUESSES` the code is thrown away.
+static WRONG_GUESSES: AtomicU32 = AtomicU32::new(0);
+const MAX_GUESSES: u32 = 5;
+
 /// A new six-digit pairing code, valid for ten minutes.
 pub fn new_pair_code(core: &Core) -> String {
     use rand::Rng;
+    WRONG_GUESSES.store(0, Ordering::SeqCst);
     let code = format!("{:06}", rand::rng().random_range(0..1_000_000));
     *core.pair_code.lk() = Some((code.clone(), Instant::now()));
     code
@@ -145,6 +150,8 @@ async fn handle(core: &Arc<Core>, token: &str, u: &Value) {
             let valid = pc.as_ref().is_some_and(|(c, at)| c == code.trim() && at.elapsed() < PAIR_FOR);
             if valid {
                 *pc = None; // one use only
+            } else if pc.is_some() && WRONG_GUESSES.fetch_add(1, Ordering::SeqCst) + 1 >= MAX_GUESSES {
+                *pc = None; // someone is guessing: a six-digit code must not survive a brute-force run
             }
             valid
         };
@@ -171,11 +178,13 @@ async fn handle(core: &Arc<Core>, token: &str, u: &Value) {
         return send(core, token, chat, "Hi! I'm Nuzzle, a private desktop buddy. To talk to me, open Settings -> Remote on the computer, make a pairing code and send /pair CODE here.").await;
     }
     if text == "/start" || text == "/help" {
-        return send(core, token, chat, "Just write to me like a chat. I can use my tools for you; anything risky shows Allow / No buttons here. /stop stops whatever I'm doing.").await;
+        let hello = "Just write to me like a chat. I can use my tools for you; anything risky shows Allow / No buttons here.";
+        return send(core, token, chat, &format!("{hello}\n\n{}", crate::quick::HELP)).await;
     }
-    if text == "/stop" {
-        core.stop_everything();
-        return send(core, token, chat, "Stopped.").await;
+    // Timers, notes, sums and the like are done at once, even while the model is busy or still loading.
+    if let Some(cmd) = crate::quick::parse(&text) {
+        let reply = crate::quick::run(core, cmd).await;
+        return send(core, token, chat, &reply).await;
     }
     if text.is_empty() {
         return send(core, token, chat, "I can only read text messages here for now.").await;

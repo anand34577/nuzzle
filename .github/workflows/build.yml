@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-24.04, macos-14]
+        os: [windows-latest, ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -81,12 +81,12 @@ jobs:
               src-tauri/target/release/bundle/deb/*.deb
               src-tauri/target/release/bundle/rpm/*.rpm
               src-tauri/target/release/bundle/appimage/*.AppImage
-          - os: macos-14
+          - os: macos-15
             name: nuzzle-macos-arm64
             files: |
               src-tauri/target/release/bundle/dmg/*.dmg
           # Intel Macs: cross-built on the Apple-silicon runner, with the x64 llama.cpp bundled.
-          - os: macos-14
+          - os: macos-15
             name: nuzzle-macos-x64
             target: x86_64-apple-darwin
             llama_arch: x64

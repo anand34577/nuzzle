@@ -167,6 +167,13 @@
         </div>
         <p class="hint">You'll draw a rectangle on your screen. I stay inside it and only perch on windows within it.</p>
       </div>
+      <div class="card grid2">
+        <div class="card-head full"><h2>Morning hello</h2></div>
+        <label class="switch full"><input id="morning_hello" type="checkbox"><span class="track"></span>
+          <span>The first time I see you each morning, tell you today's reminders and the weather (never in quiet mode, and only when there is something to say)</span></label>
+        <div class="field full" data-field="home_place"><label for="home_place">Your town or city, for the weather (looked up on Open-Meteo; leave empty for no weather)</label>
+          <input id="home_place" type="text" maxlength="100" autocomplete="off" placeholder="Pune"><div class="msg"></div></div>
+      </div>
     </section>
 
     <!-- ========== CHAT ========== -->
@@ -177,21 +184,23 @@
         <div class="card-head"><h2>Try asking me</h2></div>
         <div class="suggest" id="suggest" role="group" aria-label="Things to try">
           <button type="button" data-say="What's on my screen right now? Give me a short summary.">Summarize my screen</button>
-          <button type="button" data-say="Start a 25 minute focus timer and remind me to take a break after.">Start a 25 min focus timer</button>
+          <button type="button" data-say="/timer 25m Focus time is over. Stand up and take a break!">Start a 25 min focus timer</button>
           <button type="button" data-say="What can you help me with? Show me a few useful things you can do.">What can you do?</button>
-          <button type="button" data-say="Give me a quick stretch and water break reminder in 30 minutes.">Remind me to stretch</button>
+          <button type="button" data-say="/remind 30m Stretch and drink some water">Remind me to stretch</button>
           <button type="button" data-say="What's the weather like today?">Weather today</button>
           <button type="button" data-say="Tell me something fun to cheer me up.">Cheer me up</button>
+          <button type="button" data-say="/remind every 1h Drink some water">Hourly water reminder</button>
+          <button type="button" data-say="/help">Show quick commands</button>
         </div>
         <p class="hint">These need me to be awake (see Get going). Tap one to send it.</p>
       </div>
       <div class="card">
         <div class="card-head"><h2>Conversation <span class="count" id="chat-total"></span></h2>
-          <div class="row"><button class="btn ghost" id="chat-copy" disabled>Copy all</button><button class="btn danger" id="chat-clear" disabled>Clear</button></div></div>
+          <div class="row"><button class="btn ghost" id="chat-copy" disabled>Copy all</button><button class="btn danger" id="chat-clear" title="Start a fresh chat: I forget this conversation too (saved memories stay)" disabled>Clear</button></div></div>
         <ol id="chat-log" class="chat-log" aria-live="polite"></ol>
         <p class="hint mem-empty" id="chat-empty">Nothing yet. Talk to me, or press the typing shortcut.</p>
         <form id="chat-form" class="row" autocomplete="off">
-          <input id="chat-say" type="text" maxlength="2000" placeholder="Type a message..." aria-label="Message to send">
+          <input id="chat-say" type="text" maxlength="2000" placeholder="Type a message, or /help for quick commands" aria-label="Message to send">
           <button class="btn primary" id="chat-send-btn" disabled>Send</button>
         </form>
       </div>
@@ -443,7 +452,7 @@
     <!-- ========== ADVANCED ========== -->
     <section class="panel" id="panel-advanced" role="tabpanel" data-panel="advanced" hidden>
       <h1>Advanced</h1>
-      <p class="lead">For tinkerers. The defaults work well for LFM3-Omni.</p>
+      <p class="lead">For tinkerers. The defaults work well for LFM3-Omni. Below: use another brain, or your own speech engines.</p>
       <div class="card grid2">
         <div class="field" data-field="gpu_layers"><label for="gpu_layers">GPU layers (99 = all, 0 = processor only)</label>
           <input id="gpu_layers" type="number" min="0" max="999"><div class="msg"></div></div>
@@ -451,6 +460,70 @@
           <input id="ctx" type="number" min="512" step="1024"><div class="msg"></div></div>
         <div class="field full" data-field="llama_args"><label for="llama_args">Extra llama-server options</label>
           <input id="llama_args" type="text" autocomplete="off" spellcheck="false"><div class="msg"></div></div>
+      </div>
+      <div class="card grid2" id="engine-card">
+        <div class="card-head full"><h2>Brain: where I think</h2></div>
+        <div class="field full" data-field="llm_provider"><label for="llm_provider">Thinking</label>
+          <select id="llm_provider">
+            <option value="local">On this computer (private, the downloaded model)</option>
+            <option value="api">A chat service (any OpenAI-compatible API)</option>
+          </select><div class="msg"></div></div>
+        <p class="hint full" data-when="llm_provider=api">Works with OpenAI, OpenRouter, Groq, Together, Mistral, DeepSeek, and local servers such as Ollama or LM Studio. With a service on the internet, what you say and type, my memory notes and any screenshots I take are sent to it. Tools, files and approvals stay on this computer.</p>
+        <div class="field full" data-when="llm_provider=api" data-field="llm_api_url"><label for="llm_api_url">Service address (ends in /v1)</label>
+          <input id="llm_api_url" type="url" list="llm-urls" autocomplete="off" spellcheck="false" placeholder="https://api.openai.com/v1"><div class="msg"></div>
+          <datalist id="llm-urls">
+            <option value="https://api.openai.com/v1">OpenAI</option>
+            <option value="https://openrouter.ai/api/v1">OpenRouter</option>
+            <option value="https://api.groq.com/openai/v1">Groq</option>
+            <option value="https://api.together.xyz/v1">Together</option>
+            <option value="https://api.mistral.ai/v1">Mistral</option>
+            <option value="https://api.deepseek.com/v1">DeepSeek</option>
+            <option value="http://localhost:11434/v1">Ollama (this computer)</option>
+            <option value="http://localhost:1234/v1">LM Studio (this computer)</option>
+          </datalist></div>
+        <div class="field" data-when="llm_provider=api" data-field="llm_api_model"><label for="llm_api_model">Model name</label>
+          <input id="llm_api_model" type="text" autocomplete="off" spellcheck="false" placeholder="gpt-4o-mini, llama3.2, ..."><div class="msg"></div></div>
+        <div class="field" data-when="llm_provider=api" data-field="llm_api_key"><label for="llm_api_key">API key (kept in the system credential store)</label>
+          <input id="llm_api_key" type="password" autocomplete="off" spellcheck="false" placeholder="Leave empty for local servers"><div class="msg"></div></div>
+        <label class="switch full" data-when="llm_provider=api"><input id="llm_api_vision" type="checkbox"><span class="track"></span>
+          <span>This model can look at pictures (send it screenshots when I need to see)</span></label>
+      </div>
+      <div class="card grid2">
+        <div class="card-head full"><h2>Ears and voice</h2></div>
+        <p class="hint full">Normally the local model hears and speaks by itself. You can use your own speech engines instead: any server with OpenAI-style <code>/audio/transcriptions</code> and <code>/audio/speech</code> endpoints. <code>scripts/speech-server.py</code> in the project runs Hima-ASR and Paradee that way on this computer.</p>
+        <div class="card-head full"><h2>Run the speech server for me</h2><span class="pill" id="speech-state">Off</span></div>
+        <label class="switch full"><input id="speech_server_auto" type="checkbox"><span class="track"></span>
+          <span>Start Hima-ASR (hearing) and Paradee (speaking) with Nuzzle, and stop them when I quit</span></label>
+        <p class="hint full" id="speech-detail" hidden></p>
+        <div class="field full" data-when="speech_server_auto=true" data-field="speech_asr_dir"><label for="speech_asr_dir">Hima-ASR folder (hearing; leave empty to skip)</label>
+          <input id="speech_asr_dir" type="text" autocomplete="off" spellcheck="false" placeholder="C:\\models\\hima-asr"><div class="msg"></div></div>
+        <div class="field full" data-when="speech_server_auto=true" data-field="speech_tts_dir"><label for="speech_tts_dir">Paradee folder (speaking; leave empty to skip)</label>
+          <input id="speech_tts_dir" type="text" autocomplete="off" spellcheck="false" placeholder="C:\\models\\Paradee\\models"><div class="msg"></div></div>
+        <div class="field" data-when="speech_server_auto=true" data-field="speech_python"><label for="speech_python">Python to run it with (empty = python)</label>
+          <input id="speech_python" type="text" autocomplete="off" spellcheck="false" placeholder="python"><div class="msg"></div></div>
+        <div class="field" data-when="speech_server_auto=true" data-field="speech_port"><label for="speech_port">Port</label>
+          <input id="speech_port" type="number" min="1024" max="65535"><div class="msg"></div></div>
+        <p class="hint full" data-when="speech_server_auto=true">Saving switches hearing and speaking to this server for the folders you filled in. It needs Python with <code>onnxruntime</code> (1.20 or newer), <code>numpy</code>, <code>tokenizers</code>, <code>soundfile</code> and, for speaking, the <code>paradee</code> package.</p>
+        <div class="card-head full"><h2>Engines</h2></div>
+        <div class="field" data-field="stt_engine"><label for="stt_engine">Hearing (speech to text)</label>
+          <select id="stt_engine"><option value="model">The local model</option><option value="api">Speech server</option></select><div class="msg"></div></div>
+        <div class="field" data-field="tts_engine"><label for="tts_engine">Speaking (text to speech)</label>
+          <select id="tts_engine"><option value="model">The local model</option><option value="api">Speech server</option></select><div class="msg"></div></div>
+        <div class="field full" data-when="stt_engine=api" data-field="stt_api_url"><label for="stt_api_url">Hearing server address</label>
+          <input id="stt_api_url" type="url" autocomplete="off" spellcheck="false" placeholder="http://127.0.0.1:8765/v1"><div class="msg"></div></div>
+        <div class="field" data-when="stt_engine=api" data-field="stt_api_model"><label for="stt_api_model">Model name (if the server needs one)</label>
+          <input id="stt_api_model" type="text" autocomplete="off" spellcheck="false" placeholder="whisper-1"><div class="msg"></div></div>
+        <div class="field" data-when="stt_engine=api" data-field="stt_api_key"><label for="stt_api_key">API key (optional)</label>
+          <input id="stt_api_key" type="password" autocomplete="off" spellcheck="false"><div class="msg"></div></div>
+        <div class="field full" data-when="tts_engine=api" data-field="tts_api_url"><label for="tts_api_url">Speaking server address</label>
+          <input id="tts_api_url" type="url" autocomplete="off" spellcheck="false" placeholder="http://127.0.0.1:8765/v1"><div class="msg"></div></div>
+        <div class="field" data-when="tts_engine=api" data-field="tts_api_voice"><label for="tts_api_voice">Voice (empty: each character's own, on the built-in server)</label>
+          <input id="tts_api_voice" type="text" list="tts-voices" autocomplete="off" spellcheck="false" placeholder="Empty = each character has their own"><div class="msg"></div>
+          <datalist id="tts-voices"><option value="af_heart">Heart, English (US), female</option><option value="am_puck">Puck, English (US), male</option><option value="bf_isabella">Isabella, English (UK), female</option><option value="bm_fable">Fable, English (UK), male</option><option value="hf_alpha">Alpha, Hindi, female</option><option value="hm_omega">Omega, Hindi, male</option><option value="ff_siwis">Siwis, French, female</option><option value="em_alex">Alex, Spanish, male</option></datalist></div>
+        <div class="field" data-when="tts_engine=api" data-field="tts_api_model"><label for="tts_api_model">Model name (if the server needs one)</label>
+          <input id="tts_api_model" type="text" autocomplete="off" spellcheck="false" placeholder="tts-1"><div class="msg"></div></div>
+        <div class="field full" data-when="tts_engine=api" data-field="tts_api_key"><label for="tts_api_key">API key (optional)</label>
+          <input id="tts_api_key" type="password" autocomplete="off" spellcheck="false"><div class="msg"></div></div>
       </div>
       <div class="card">
         <div class="card-head"><h2>Web connectors</h2><button class="btn ghost" id="add-hook">Add connector</button></div>

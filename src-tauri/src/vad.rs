@@ -85,6 +85,16 @@ impl Endpointer {
         if was { Vad::Dismissed } else { Vad::Idle }
     }
 
+    /// The newest `max_bytes` of the utterance being spoken right now (PCM16), once it has been announced as
+    /// speech. Lets the voice be "felt" while the user is still talking.
+    pub fn peek(&self, max_bytes: usize) -> Option<Vec<u8>> {
+        if !(self.active && self.announced) || self.utt.len() < 16_000 {
+            return None; // under half a second: too little to judge
+        }
+        let from = self.utt.len().saturating_sub(max_bytes) & !1; // whole samples
+        Some(self.utt[from..].to_vec())
+    }
+
     /// Is an utterance in progress?
     #[cfg(test)]
     pub fn active(&self) -> bool {
