@@ -49,7 +49,8 @@ impl Hand {
     fn goto(&mut self, tx: i32, ty: i32) -> R {
         let (cx, cy) = self.e.location().map_err(err)?;
         let dist = (((tx - cx).pow(2) + (ty - cy).pow(2)) as f64).sqrt();
-        let steps = (dist / 14.0).clamp(10.0, 50.0) as i32;
+        // Quick but still a visible glide: the user can see where it is going and grab the mouse to stop it.
+        let steps = (dist / 30.0).clamp(6.0, 24.0) as i32;
         for i in 1..=steps {
             self.alive()?;
             let t = i as f64 / steps as f64;
@@ -57,7 +58,7 @@ impl Hand {
             let x = cx + ((tx - cx) as f64 * t) as i32;
             let y = cy + ((ty - cy) as f64 * t) as i32;
             self.e.move_mouse(x, y, Coordinate::Abs).map_err(err)?;
-            sleep(Duration::from_millis(9));
+            sleep(Duration::from_millis(8));
             let (ax, ay) = self.e.location().map_err(err)?;
             if (ax - x).abs() > 30 || (ay - y).abs() > 30 {
                 self.stop.fetch_add(1, Ordering::SeqCst);
@@ -65,7 +66,7 @@ impl Hand {
             }
         }
         self.e.move_mouse(tx, ty, Coordinate::Abs).map_err(err)?;
-        sleep(Duration::from_millis(60));
+        sleep(Duration::from_millis(40));
         Ok(())
     }
 

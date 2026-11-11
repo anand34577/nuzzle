@@ -25,6 +25,33 @@ pub fn seed_for(character: &str, variant: u32) -> i64 {
     i64::from(h & 0x7fff_ffff)
 }
 
+/// Each character's own Paradee voice and speaking speed, in the language I speak. Paradee has eight voices, so
+/// speed does the rest: Zap is quick, Pebble is slow, Wisp drifts. (voice id, speed)
+pub fn paradee_for(character: &str, lang: &str) -> (&'static str, f64) {
+    let (english, speed, female) = match character {
+        "pip" => ("af_heart", 1.08, true),
+        "mochi" => ("bf_isabella", 0.96, true),
+        "bruno" => ("bm_fable", 0.9, false),
+        "zap" => ("am_puck", 1.15, false),
+        "nimbus" => ("af_heart", 0.9, true),
+        "pebble" => ("bm_fable", 0.82, false),
+        "ember" => ("am_puck", 1.05, false),
+        "bun" => ("bf_isabella", 1.06, true),
+        "axo" => ("af_heart", 1.16, true),
+        "wisp" => ("bf_isabella", 0.86, true),
+        "penny" => ("af_heart", 1.0, true),
+        "cosmo" => ("am_puck", 0.95, false),
+        _ => ("af_heart", 1.0, true),
+    };
+    let voice = match lang.to_lowercase().get(..2) {
+        Some("hi") => if female { "hf_alpha" } else { "hm_omega" },
+        Some("fr") => "ff_siwis",
+        Some("es") => "em_alex",
+        _ => english,
+    };
+    (voice, speed)
+}
+
 /// Cache key: when it changes the reference has to be made (or loaded) again.
 pub fn key(s: &Settings) -> String {
     if s.voice_ref_path.trim().is_empty() {
@@ -70,6 +97,9 @@ pub fn check_sample(path: &str) -> Result<(), String> {
 /// The reference clip for the current voice settings, base64-encoded for `/tts`, or `None` when there is none (the
 /// voice then falls back to the plain male/female default).
 pub async fn reference(core: &Arc<Core>, s: &Settings) -> Option<String> {
+    if s.tts_engine != "model" || !s.runs_local_server() {
+        return None; // another engine speaks: it has its own voices
+    }
     let k = key(s);
     if let Some((ck, b64)) = core.voice_ref.lk().as_ref() {
         if *ck == k {
@@ -140,6 +170,18 @@ pub fn warm(core: Arc<Core>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_character_has_a_voice_of_their_own() {
+        let all: std::collections::HashSet<String> =
+            crate::settings::CHARACTERS.iter().map(|c| { let (v, s) = paradee_for(c.0, "en"); format!("{v}@{s}") }).collect();
+        assert_eq!(all.len(), crate::settings::CHARACTERS.len(), "no two characters sound the same");
+        assert_eq!(paradee_for("zap", "en-US"), ("am_puck", 1.15));
+        assert_eq!(paradee_for("zap", "hi"), ("hm_omega", 1.15));
+        assert_eq!(paradee_for("mochi", "HI-in").0, "hf_alpha");
+        assert_eq!(paradee_for("bruno", "fr").0, "ff_siwis");
+        assert_eq!(paradee_for("nobody", "es").0, "em_alex");
+    }
 
     #[test]
     fn seeds_are_stable_and_differ_by_character_and_variant() {

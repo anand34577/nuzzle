@@ -2,9 +2,37 @@
 
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.4.0] - 2026-11-11
+
+### Added
+- Quick commands: a message starting with a slash is done at once, without the model, so the app is useful before a model is downloaded and while it loads. `/timer`, `/remind` (also `every 1h ...` and `every day at 9am ...`), `/reminders`, `/cancel`, `/note`, `/notes`, `/calc`, `/convert`, `/flip`, `/roll`, `/pick`, `/remember`, `/time`, `/new`, `/stop`, `/help`. They work in the typing box, Settings -> Chat, Telegram and the agent API.
+- Repeating reminders ("remind me to drink water every hour"). Settings -> Reminders shows how often each repeats.
+- Tools for the model: `convert_units` (length, weight, volume, time, data size, speed, area, temperature) and `random` (coin, dice, number, pick one).
+- Right-click menu: *Quick commands*. The focus timer there and in *Try asking me* is now instant and no longer depends on the model.
+
+- Other brains: Settings -> Advanced -> *Brain* can use any OpenAI-compatible chat service (OpenAI, OpenRouter, Groq, Together, Mistral, DeepSeek, or a local Ollama / LM Studio server) instead of the downloaded model. The key is kept in the system credential store. With such a service no local model is needed at all.
+- Your own speech engines: Settings -> Advanced -> *Ears and voice* can send hearing and speaking to any server with OpenAI-style `/audio/transcriptions` and `/audio/speech` endpoints, so a text-only model can still listen and talk.
+- `scripts/speech-server.py`: a small local server that runs Hima-ASR (speech to text, 11 Indian languages and English) and Paradee (text to speech) behind those endpoints, on the CPU.
+- Nuzzle can run that speech server itself: Settings -> Advanced -> *Run the speech server for me* starts it with the app, restarts it when its settings change, stops it on quit and shows whether it is up (and why not).
+- Feeling your voice: with the whole Hima repo in the model folder (`hima_onnx.py` and `decide/`), the speech server also reports tone, emotion and urgency. While you are still talking the character's face follows it (asked about every 1.2 s), and the reply is told how you sounded so it can be gentler or livelier.
+- A voice of their own: on the built-in speech server each character speaks with their own Paradee voice and pace (Zap quick, Pebble slow), in English, Hindi, French or Spanish following the speech language. A voice typed in Settings is used as it is.
+- Morning hello: the first time I see you each morning I say today's reminders and the weather for your town (Settings -> Character). Once a day, only when there is something to say, never in quiet mode. `/today` gives the same any time and `/weather [place]` the forecast.
+- The log now times the voice pipeline (`pipeline: heard ... in N ms`, `first word after N ms`, `speech ... started after N ms`).
+
+### Changed
+- The local model reads its instructions and tool list as soon as it wakes up (and again when computer control is switched on or off), so the first answer no longer waits for that. Chat requests always use the same server slot, so its cache is reused from turn to turn.
+- Pointer moves take about half as long, and the pause after each action is 350 ms instead of 600 ms.
+
+- *Clear* in Settings -> Chat starts a fresh conversation: the model forgets the chat too, not only the list on screen.
+- The typing box says what to do when there is no model yet, instead of "I'm still waking up".
+- `set_reminder` accepts numbers sent as text and durations such as "in 2 hours", which small models often produce.
 
 ### Fixed
+- Reading web pages: any page with a `<header>` element lost everything after it (the `<head>` remover matched it), so most modern sites came back nearly empty.
+- Reading web pages: a page containing certain non-English letters before a script or style block could crash the reply. Numeric entities such as `&#39;` are now decoded.
+- A reminder that came due while the app was closed was dropped silently at the next launch (it fired before the character was on screen). It now waits and says it was due earlier.
+- Stopping me mid-reply left an unanswered question in the conversation, which could confuse the next reply.
+- The right-click menu showed `Ctrl+Alt+C` even on a Mac or after the shortcut was changed, and could be cut off when the character is small.
 - Telegram pairing: a code is thrown away after 5 wrong guesses, so a six-digit code can't be brute-forced.
 - Sites whose names start with `fc`, `fd` or `fe80` (for example fcbarcelona.com) were wrongly treated as local-network addresses and blocked.
 

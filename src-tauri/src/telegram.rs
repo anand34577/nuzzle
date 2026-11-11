@@ -178,11 +178,13 @@ async fn handle(core: &Arc<Core>, token: &str, u: &Value) {
         return send(core, token, chat, "Hi! I'm Nuzzle, a private desktop buddy. To talk to me, open Settings -> Remote on the computer, make a pairing code and send /pair CODE here.").await;
     }
     if text == "/start" || text == "/help" {
-        return send(core, token, chat, "Just write to me like a chat. I can use my tools for you; anything risky shows Allow / No buttons here. /stop stops whatever I'm doing.").await;
+        let hello = "Just write to me like a chat. I can use my tools for you; anything risky shows Allow / No buttons here.";
+        return send(core, token, chat, &format!("{hello}\n\n{}", crate::quick::HELP)).await;
     }
-    if text == "/stop" {
-        core.stop_everything();
-        return send(core, token, chat, "Stopped.").await;
+    // Timers, notes, sums and the like are done at once, even while the model is busy or still loading.
+    if let Some(cmd) = crate::quick::parse(&text) {
+        let reply = crate::quick::run(core, cmd).await;
+        return send(core, token, chat, &reply).await;
     }
     if text.is_empty() {
         return send(core, token, chat, "I can only read text messages here for now.").await;

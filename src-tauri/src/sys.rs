@@ -119,6 +119,37 @@ pub fn parse_clock(s: &str) -> Option<(u32, u32)> {
     (m < 60).then_some((h, m))
 }
 
+/// "10m", "1h30m", "90 seconds", "2 hours", "1.5h" -> seconds. A bare number means minutes.
+pub fn parse_duration(s: &str) -> Option<u64> {
+    let s: String = s.trim().to_lowercase().chars().filter(|c| !c.is_whitespace()).collect();
+    let b = s.as_bytes();
+    let (mut i, mut total, mut parts) = (0, 0.0f64, 0);
+    while i < b.len() {
+        let start = i;
+        while i < b.len() && (b[i].is_ascii_digit() || b[i] == b'.') {
+            i += 1;
+        }
+        let n: f64 = s[start..i].parse().ok()?;
+        let unit_start = i;
+        while i < b.len() && b[i].is_ascii_alphabetic() {
+            i += 1;
+        }
+        let mult = match &s[unit_start..i] {
+            "s" | "sec" | "secs" | "second" | "seconds" => 1.0,
+            "m" | "min" | "mins" | "minute" | "minutes" => 60.0,
+            "" if i == b.len() && parts == 0 => 60.0,
+            "h" | "hr" | "hrs" | "hour" | "hours" => 3600.0,
+            "d" | "day" | "days" => 86_400.0,
+            "w" | "week" | "weeks" => 604_800.0,
+            _ => return None,
+        };
+        total += n * mult;
+        parts += 1;
+    }
+    let secs = total.round();
+    (parts > 0 && (1.0..=4e9).contains(&secs)).then_some(secs as u64)
+}
+
 /// Seconds from `now` (seconds since local midnight) to the next occurrence of hh:mm (today, or tomorrow if passed).
 pub fn secs_until(now_of_day: u32, h: u32, m: u32) -> u64 {
     let target = h * 3600 + m * 60;
@@ -231,6 +262,20 @@ mod tests {
         assert_eq!(parse_clock("12:15 PM"), Some((12, 15)));
         for bad in ["", "25:00", "7", "10:75", "0pm", "13pm", "abc"] {
             assert_eq!(parse_clock(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn duration_parsing() {
+        assert_eq!(parse_duration("10"), Some(600));
+        assert_eq!(parse_duration("10m"), Some(600));
+        assert_eq!(parse_duration("1h30m"), Some(5400));
+        assert_eq!(parse_duration("90 seconds"), Some(90));
+        assert_eq!(parse_duration("2 Hours"), Some(7200));
+        assert_eq!(parse_duration("1.5h"), Some(5400));
+        assert_eq!(parse_duration("1d"), Some(86_400));
+        for bad in ["", "tea", "10x", "m", "0", "3pm", "1h30", "15:30", "."] {
+            assert_eq!(parse_duration(bad), None, "{bad}");
         }
     }
 

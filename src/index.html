@@ -51,15 +51,16 @@
     <button role="menuitem" data-act="come">Come here</button>
     <button role="menuitem" data-act="nap" id="m-nap">Take a nap</button>
     <div class="menu-sep" role="separator"></div>
-    <button role="menuitem" data-act="chat">Type to me <kbd>Ctrl+Alt+C</kbd></button>
+    <button role="menuitem" data-act="chat">Type to me <kbd id="m-chat-keys">Ctrl+Alt+C</kbd></button>
     <button role="menuitem" data-act="screen">What's on my screen?</button>
     <button role="menuitem" data-act="focus">25 min focus timer</button>
+    <button role="menuitem" data-act="help">Quick commands</button>
     <div class="menu-sep" role="separator"></div>
     <button role="menuitem" data-act="settings">Settings</button>
   </div>
 
   <form id="chat" class="hidden" autocomplete="off">
-    <input id="chat-input" type="text" maxlength="2000" placeholder="Type to me..." aria-label="Message">
+    <input id="chat-input" type="text" maxlength="2000" placeholder="Type to me, or /help" aria-label="Message">
     <button type="submit" id="chat-send" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 17-3-7z"/></svg></button>
   </form>
 

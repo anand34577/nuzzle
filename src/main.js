@@ -316,6 +316,8 @@ function renderFlags() {
   const push = f.listen_mode === 'push';
   $('b-mic').title = push ? `Microphone (push to talk: hold ${prettyKeys(f.ptt_shortcut)})` : 'Microphone';
   $('b-chat').title = `Type to me${f.chat_shortcut ? ` (${prettyKeys(f.chat_shortcut)})` : ''}`;
+  const hint = $('m-chat-keys');                            // the menu shows the shortcut actually in use
+  if (hint) { hint.textContent = prettyKeys(f.chat_shortcut); hint.hidden = !f.chat_shortcut; }
   $('b-stop').title = `Stop everything (${prettyKeys('CommandOrControl+Alt+Space')})`;
   document.body.classList.toggle('ptt', push && !!f.ptt_held);
 }
@@ -509,6 +511,27 @@ listen('heard', (e) => {
   if (S.thinking || !$('thought').classList.contains('hidden')) $('thought-text').textContent = '“' + t + '”';
   else bubble('You: ' + t, { ms: 3500 });
 });
+// The answer to a quick command (/timer, /note, /calc ...): shown at once, from its first line.
+listen('quick', (e) => {
+  if (S.asking) return;
+  const text = String(e.payload || '');
+  wake(); hideThought();
+  S.happyUntil = performance.now() + 1500; sp.squash.kick(-4);
+  bubble(text, { ms: readingTime(text) });
+  $('bubble').scrollTop = 0;
+});
+// How your voice sounds while you talk (from the speech server's decision head): I react on my face straight away.
+listen('feel', (e) => {
+  const f = e.payload || {}, n = performance.now();
+  const sure = (k, min) => (f[k] && f[k].p >= min ? f[k].is : null);
+  const emotion = sure('emotion', 0.5), tone = sure('tone', 0.55);
+  wake();
+  if (emotion === 'happy' || tone === 'cheerful') S.happyUntil = Math.max(S.happyUntil, n + 2600);
+  else if (emotion === 'frustrated' || emotion === 'worried' || tone === 'sad' || tone === 'angry' || tone === 'anxious') S.sadUntil = n + 2600;   // concern
+  else if (emotion === 'apologetic') S.curiousUntil = n + 2200;
+  else if (tone === 'confused') S.curiousUntil = n + 2600;
+  if (tone === 'rushed' || sure('urgency', 0.5) === 'very urgent') S.surpriseUntil = n + 700;                                                        // ears up: this matters
+});
 listen('status', (e) => {
   bubble(e.payload, { notice: true, ms: e.payload ? Math.max(9000, e.payload.length * 80) : 0 });
   if (e.payload) flashBar(6000);
@@ -621,7 +644,8 @@ const menuActions = {
   },
   chat() { openChat(); },
   screen() { sayToMe('What is on my screen right now? Give me a short summary and tell me if you can help with anything.'); },
-  focus() { sayToMe('Start a 25 minute focus timer and remind me to take a break when it ends.'); },
+  focus() { sayToMe('/timer 25m Focus time is over. Stand up and take a break!'); },
+  help() { sayToMe('/help'); },
   settings() { call('open_settings'); },
 };
 $('menu').addEventListener('click', (e) => {

@@ -47,8 +47,10 @@ fn normalize(args: &Value, geom: &screen::Geom, mode: &str) -> Value {
     out
 }
 
+/// A number argument. Small models often send numbers as text ("5"), so that is accepted too.
 fn num(args: &Value, k: &str) -> Option<f64> {
-    args.get(k).and_then(Value::as_f64)
+    let v = args.get(k)?;
+    v.as_f64().or_else(|| v.as_str()?.trim().parse().ok()).filter(|n| n.is_finite())
 }
 
 fn fail(msg: impl Into<String>) -> Value {
@@ -101,15 +103,71 @@ fn is_private_host(host: &str) -> bool {
             || (o[0] == 169 && o[1] == 254))
 }
 
+/// Replace `&amp;`, `&#39;`, `&#x27;` and friends with the characters they stand for.
+fn decode_entities(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(at) = rest.find('&') {
+        out.push_str(&rest[..at]);
+        rest = &rest[at..];
+        let end = rest[1..].find(|c: char| !(c.is_ascii_alphanumeric() || c == '#')).map(|e| e + 1).filter(|&e| e <= 10 && rest[e..].starts_with(';'));
+        let ch = end.and_then(|e| {
+            let name = &rest[1..e];
+            Some(match name {
+                "amp" => '&',
+                "lt" => '<',
+                "gt" => '>',
+                "quot" => '"',
+                "apos" => '\'',
+                "nbsp" => ' ',
+                "ndash" => '\u{2013}',
+                "mdash" => '\u{2014}',
+                "hellip" => '\u{2026}',
+                "copy" => '\u{a9}',
+                "deg" => '\u{b0}',
+                _ => {
+                    let n = name.strip_prefix('#')?;
+                    let code = match n.strip_prefix(['x', 'X']) {
+                        Some(hex) => u32::from_str_radix(hex, 16).ok()?,
+                        None => n.parse().ok()?,
+                    };
+                    char::from_u32(code).filter(|c| !c.is_control())?
+                }
+            })
+        });
+        match (ch, end) {
+            (Some(c), Some(e)) => {
+                out.push(c);
+                rest = &rest[e + 1..];
+            }
+            _ => {
+                out.push('&');
+                rest = &rest[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 /// A readable approximation of an HTML page.
 fn html_to_text(html: &str) -> String {
     let mut s = html.to_string();
     for tag in ["script", "style", "noscript", "svg", "head"] {
+        let (open, close) = (format!("<{tag}"), format!("</{tag}>"));
+        let mut from = 0;
         loop {
-            let lower = s.to_lowercase();
-            let Some(a) = lower.find(&format!("<{tag}")) else { break };
-            let end = lower[a..].find(&format!("</{tag}>")).map(|e| a + e + tag.len() + 3).unwrap_or(s.len());
-            s.replace_range(a..end.min(s.len()), " ");
+            // ASCII lower-casing keeps every byte where it was, so positions found here are valid in `s`.
+            let lower = s.to_ascii_lowercase();
+            let Some(a) = lower[from..].find(&open).map(|i| i + from) else { break };
+            // "<head" must not match "<header": the tag name has to end here.
+            if lower[a + open.len()..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '-') {
+                from = a + open.len();
+                continue;
+            }
+            let end = lower[a..].find(&close).map(|e| a + e + close.len()).unwrap_or(s.len());
+            s.replace_range(a..end, " ");
+            from = a;
         }
     }
     let mut out = String::with_capacity(s.len());
@@ -125,8 +183,7 @@ fn html_to_text(html: &str) -> String {
             _ => {}
         }
     }
-    let out = out.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&#39;", "'");
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
+    decode_entities(&out).split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn activity_label(name: &str) -> String {
@@ -150,7 +207,8 @@ fn activity_label(name: &str) -> String {
         "clipboard_get" | "clipboard_set" => "Using the clipboard",
         "web_fetch" => "Reading a web page",
         "web_search" => "Searching the web",
-        "calculate" => "Working it out",
+        "calculate" | "convert_units" => "Working it out",
+        "random" => "Leaving it to chance",
         "come_here" => "On my way",
         "email_draft" => "Writing your email",
         "notes" => "Looking at my notes",
@@ -536,7 +594,7 @@ async fn web_search(query: &str) -> Result<Value, String> {
 }
 
 /// A small calculator: + - * / % ^, parentheses, and sqrt abs round floor ceil ln log sin cos tan, pi, e.
-fn calculate(expr: &str) -> Result<f64, String> {
+pub(crate) fn calculate(expr: &str) -> Result<f64, String> {
     struct P<'a> {
         s: &'a [u8],
         i: usize,
@@ -657,6 +715,163 @@ fn calculate(expr: &str) -> Result<f64, String> {
     v.is_finite().then_some(v).ok_or_else(|| "The answer isn't a finite number.".into())
 }
 
+/// A number the way a person would write it: no float noise, no needless decimals.
+pub(crate) fn pretty(v: f64) -> String {
+    if v != 0.0 && (v.abs() >= 1e15 || v.abs() < 1e-6) {
+        return format!("{v:e}");
+    }
+    let digits = if v.abs() >= 1000.0 { 2 } else if v.abs() >= 1.0 { 4 } else { 6 };
+    let k = 10f64.powi(digits);
+    format!("{}", (v * k).round() / k)
+}
+
+/// A unit name (or common spelling of it) -> (what it measures, size in that measure's base unit).
+fn unit(name: &str) -> Option<(&'static str, f64)> {
+    let n: String = name.trim().to_lowercase().chars().filter(|c| !matches!(c, ' ' | '.' | '\u{b0}' | '_' | '-')).collect();
+    let look = |n: &str| -> Option<(&'static str, f64)> {
+        Some(match n {
+            "mm" | "millimeter" | "millimetre" => ("length", 0.001),
+            "cm" | "centimeter" | "centimetre" => ("length", 0.01),
+            "m" | "meter" | "metre" => ("length", 1.0),
+            "km" | "kilometer" | "kilometre" => ("length", 1000.0),
+            "in" | "inch" | "inche" => ("length", 0.0254),
+            "ft" | "foot" | "feet" => ("length", 0.3048),
+            "yd" | "yard" => ("length", 0.9144),
+            "mi" | "mile" => ("length", 1609.344),
+            "nmi" | "nauticalmile" => ("length", 1852.0),
+            "mg" | "milligram" => ("weight", 1e-6),
+            "g" | "gram" | "gramme" => ("weight", 0.001),
+            "kg" | "kilo" | "kilogram" | "kilogramme" => ("weight", 1.0),
+            "t" | "tonne" | "ton" => ("weight", 1000.0),
+            "oz" | "ounce" => ("weight", 0.028_349_523_125),
+            "lb" | "pound" => ("weight", 0.453_592_37),
+            "st" | "stone" => ("weight", 6.350_293_18),
+            "ml" | "milliliter" | "millilitre" => ("volume", 0.001),
+            "l" | "liter" | "litre" => ("volume", 1.0),
+            "tsp" | "teaspoon" => ("volume", 0.004_928_921_593_75),
+            "tbsp" | "tablespoon" => ("volume", 0.014_786_764_781_25),
+            "cup" => ("volume", 0.236_588_236_5),
+            "floz" | "fluidounce" => ("volume", 0.029_573_529_562_5),
+            "pt" | "pint" => ("volume", 0.473_176_473),
+            "qt" | "quart" => ("volume", 0.946_352_946),
+            "gal" | "gallon" => ("volume", 3.785_411_784),
+            "ms" | "millisecond" => ("time", 0.001),
+            "s" | "sec" | "second" => ("time", 1.0),
+            "min" | "minute" => ("time", 60.0),
+            "h" | "hr" | "hour" => ("time", 3600.0),
+            "d" | "day" => ("time", 86_400.0),
+            "wk" | "week" => ("time", 604_800.0),
+            "yr" | "year" => ("time", 31_557_600.0),
+            "b" | "byte" => ("data", 1.0),
+            "kb" | "kilobyte" => ("data", 1024.0),
+            "mb" | "megabyte" => ("data", 1_048_576.0),
+            "gb" | "gigabyte" => ("data", 1_073_741_824.0),
+            "tb" | "terabyte" => ("data", 1_099_511_627_776.0),
+            "m/s" | "mps" => ("speed", 1.0),
+            "km/h" | "kmh" | "kph" => ("speed", 1.0 / 3.6),
+            "mph" => ("speed", 0.447_04),
+            "kn" | "kt" | "knot" => ("speed", 1852.0 / 3600.0),
+            "ft/s" | "fps" => ("speed", 0.3048),
+            "m2" | "sqm" | "squaremeter" | "squaremetre" => ("area", 1.0),
+            "km2" | "sqkm" => ("area", 1e6),
+            "ft2" | "sqft" | "squarefoot" | "squarefeet" => ("area", 0.092_903_04),
+            "mi2" | "sqmi" => ("area", 2_589_988.110_336),
+            "ha" | "hectare" => ("area", 10_000.0),
+            "acre" => ("area", 4_046.856_422_4),
+            "c" | "celsius" | "centigrade" => ("temperature", 0.0),
+            "f" | "fahrenheit" => ("temperature", 1.0),
+            "k" | "kelvin" => ("temperature", 2.0),
+            _ => return None,
+        })
+    };
+    look(&n).or_else(|| n.strip_suffix('s').filter(|r| !r.is_empty()).and_then(look))
+}
+
+/// Convert between units of length, weight, volume, time, data, speed, area and temperature.
+pub(crate) fn convert(value: f64, from: &str, to: &str) -> Result<f64, String> {
+    const KINDS: &str = "I know length, weight, volume, time, data size, speed, area and temperature units.";
+    let (mut a, mut b) = (unit(from).ok_or_else(|| format!("I don't know the unit '{from}'. {KINDS}"))?, unit(to).ok_or_else(|| format!("I don't know the unit '{to}'. {KINDS}"))?);
+    // "m" next to a time unit means minutes, not metres.
+    if a.0 == "time" && b == ("length", 1.0) {
+        b = ("time", 60.0);
+    } else if b.0 == "time" && a == ("length", 1.0) {
+        a = ("time", 60.0);
+    }
+    if a.0 != b.0 {
+        return Err(format!("{from} measures {} and {to} measures {}, so one can't become the other.", a.0, b.0));
+    }
+    let out = if a.0 == "temperature" {
+        let celsius = match a.1 as u8 {
+            0 => value,
+            1 => (value - 32.0) / 1.8,
+            _ => value - 273.15,
+        };
+        match b.1 as u8 {
+            0 => celsius,
+            1 => celsius * 1.8 + 32.0,
+            _ => celsius + 273.15,
+        }
+    } else {
+        value * a.1 / b.1
+    };
+    out.is_finite().then_some(out).ok_or_else(|| "That number is too big for me.".into())
+}
+
+/// Roll dice written like "2d6", "d20" or "6" (one die with that many sides): (each roll, total).
+pub(crate) fn roll_dice(spec: &str) -> Result<(Vec<u32>, u32), String> {
+    use rand::Rng;
+    let s = spec.trim().to_lowercase();
+    let s = if s.is_empty() { "d6" } else { s.as_str() };
+    let (count, sides) = match s.split_once('d') {
+        Some((c, n)) => (if c.is_empty() { Some(1) } else { c.parse::<u32>().ok() }, n.parse::<u32>().ok()),
+        None => (Some(1), s.parse::<u32>().ok()),
+    };
+    let (Some(count), Some(sides)) = (count, sides) else { return Err("Write dice like 2d6 or d20.".into()) };
+    if !(1..=20).contains(&count) || !(2..=1000).contains(&sides) {
+        return Err("I can roll 1 to 20 dice with 2 to 1000 sides.".into());
+    }
+    let mut rng = rand::rng();
+    let rolls: Vec<u32> = (0..count).map(|_| rng.random_range(1..=sides)).collect();
+    let total = rolls.iter().sum();
+    Ok((rolls, total))
+}
+
+/// One of the options, chosen fairly.
+pub(crate) fn pick_one(options: &[String]) -> Option<&String> {
+    use rand::Rng;
+    (!options.is_empty()).then(|| &options[rand::rng().random_range(0..options.len())])
+}
+
+/// Real randomness for the model (it can't flip a fair coin in its head).
+fn random_tool(args: &Value) -> Value {
+    use rand::Rng;
+    match args["kind"].as_str().unwrap_or("number") {
+        "coin" => json!({"ok": true, "result": if rand::rng().random_bool(0.5) { "heads" } else { "tails" }}),
+        "dice" => match roll_dice(args["dice"].as_str().unwrap_or("d6")) {
+            Ok((rolls, total)) => json!({"ok": true, "rolls": rolls, "total": total}),
+            Err(e) => fail(e),
+        },
+        "pick" => {
+            let options: Vec<String> = match &args["options"] {
+                Value::Array(a) => a.iter().filter_map(|v| v.as_str().map(str::trim)).filter(|s| !s.is_empty()).map(String::from).collect(),
+                Value::String(s) => s.split(',').map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect(),
+                _ => vec![],
+            };
+            match pick_one(&options) {
+                Some(p) => json!({"ok": true, "result": p}),
+                None => fail("Give the options to pick from."),
+            }
+        }
+        _ => {
+            let (lo, hi) = (num(args, "min").unwrap_or(1.0).round(), num(args, "max").unwrap_or(100.0).round());
+            if lo > hi || (hi - lo) > 1e12 || lo.abs() > 1e15 {
+                return fail("min must not be above max.");
+            }
+            json!({"ok": true, "result": rand::rng().random_range(lo as i64..=hi as i64)})
+        }
+    }
+}
+
 /// Top-level windows that are open, by app and title (minimized ones marked).
 fn open_windows() -> Result<Vec<Value>, String> {
     let all = xcap::Window::all().map_err(|e| e.to_string())?;
@@ -772,7 +987,7 @@ fn note_file(title: &str) -> Option<String> {
     (!clean.is_empty()).then(|| format!("{clean}.md"))
 }
 
-async fn notes_tool(args: &Value) -> Value {
+pub(crate) async fn notes_tool(args: &Value) -> Value {
     let dir = notes_dir();
     match args["action"].as_str().unwrap_or("list") {
         "save" | "append" => {
@@ -842,7 +1057,7 @@ fn weather_words(code: i64) -> &'static str {
 }
 
 /// Current weather and a 3-day outlook for a place, from Open-Meteo (free, no key, no account).
-async fn weather(core: &Core, place: &str) -> Result<Value, String> {
+pub(crate) async fn weather(core: &Core, place: &str) -> Result<Value, String> {
     let get = |url: reqwest::Url| async move {
         let r = core.http.get(url).timeout(Duration::from_secs(15)).send().await.map_err(|e| format!("I couldn't reach the weather service ({e})."))?;
         r.json::<Value>().await.map_err(|e| e.to_string())
@@ -937,15 +1152,24 @@ fn reminder_tool(core: &Arc<Core>, name: &str, args: &Value) -> Value {
     match name {
         "set_reminder" => {
             let text = args["text"].as_str().unwrap_or_default();
+            let every = num(args, "every_minutes").map_or(0, |m| (m * 60.0).round().max(0.0) as u64);
             let secs = if let Some(m) = num(args, "minutes") {
                 (m * 60.0).round().max(0.0) as u64
             } else if let Some((h, m)) = args["at"].as_str().and_then(sys::parse_clock) {
                 sys::secs_until_clock(h, m)
+            } else if let Some(d) = args["at"].as_str().and_then(|a| sys::parse_duration(a.trim().trim_start_matches("in "))) {
+                d // "in 2 hours" given as the time
+            } else if every > 0 {
+                every
             } else {
                 return fail("Give either minutes (a number) or at (a time like 15:30).");
             };
-            match core.remind_add(secs, text) {
-                Ok(r) => json!({"ok": true, "note": format!("I'll remind them in {}", reminders::describe(r.due.saturating_sub(sys::unix_now())))}),
+            match core.remind_add(secs, every, text) {
+                Ok(r) => json!({"ok": true, "note": format!(
+                    "I'll remind them in {}{}",
+                    reminders::describe(r.due.saturating_sub(sys::unix_now())),
+                    if r.every > 0 { format!(", then every {}", reminders::describe(r.every)) } else { String::new() }
+                )}),
                 Err(e) => fail(e),
             }
         }
@@ -955,7 +1179,8 @@ fn reminder_tool(core: &Arc<Core>, name: &str, args: &Value) -> Value {
                 .reminders
                 .lk()
                 .iter()
-                .map(|r| json!({"text": r.text, "in": reminders::describe(r.due.saturating_sub(now))}))
+                .map(|r| json!({"text": r.text, "in": reminders::describe(r.due.saturating_sub(now)),
+                    "repeats_every": (r.every > 0).then(|| reminders::describe(r.every))}))
                 .collect();
             json!({"ok": true, "reminders": list})
         }
@@ -1069,6 +1294,15 @@ pub async fn call(core: &Arc<Core>, name: &str, args: &Value) -> Value {
             core.call_over();
             return json!({"ok": true, "note": "running over to the pointer"});
         }
+        "convert_units" => {
+            let Some(v) = num(args, "value") else { return fail("value must be a number") };
+            let (from, to) = (args["from"].as_str().unwrap_or_default(), args["to"].as_str().unwrap_or_default());
+            return match convert(v, from, to) {
+                Ok(r) => json!({"ok": true, "result": format!("{} {to}", pretty(r))}),
+                Err(e) => fail(e),
+            };
+        }
+        "random" => return random_tool(args),
         "calculate" => {
             return match calculate(args["expression"].as_str().unwrap_or_default()) {
                 Ok(v) => json!({"ok": true, "result": format!("{}", (v * 1e10).round() / 1e10)}),
@@ -1304,7 +1538,7 @@ pub async fn call(core: &Arc<Core>, name: &str, args: &Value) -> Value {
 
     match res {
         Ok(msg) => {
-            sleep(Duration::from_millis(600)).await; // let the screen settle before the next look
+            sleep(Duration::from_millis(350)).await; // let the screen settle before the next look
             json!({"ok": true, "result": msg, "note": "a fresh screenshot follows"})
         }
         Err(e) => {
@@ -1407,6 +1641,14 @@ mod tests {
     fn html_is_reduced_to_text() {
         let html = "<html><head><title>T</title><style>p{color:red}</style></head><body><script>var x=1;</script><h1>Hello &amp; welcome</h1><p>Two   words</p></body></html>";
         assert_eq!(html_to_text(html), "Hello & welcome Two words");
+        // A <header> element is not the <head>: the page after it must survive.
+        let page = "<head><title>T</title></head><body><header><nav>Menu</nav></header><main>The article</main></body>";
+        assert_eq!(html_to_text(page), "Menu The article");
+        // Letters whose lower-case form is longer (dotted capital I) must not shift the cut positions.
+        assert_eq!(
+            html_to_text("\u{130}\u{130}\u{130}<script>x()</script>\u{130}stanbul &#39;caf&eacute;&#x27; 5&nbsp;&deg;C R&D"),
+            "\u{130}\u{130}\u{130} \u{130}stanbul 'caf&eacute;' 5 \u{b0}C R&D"
+        );
     }
 
     #[test]
@@ -1445,6 +1687,48 @@ mod tests {
         for bad in ["", "1 +", "(1", "2 ** 3", "foo(2)", "1 / 0"] {
             assert!(calculate(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn units_convert() {
+        let ok = |v: f64, a: &str, b: &str, want: f64| {
+            let got = convert(v, a, b).unwrap();
+            assert!((got - want).abs() < want.abs() * 1e-6 + 1e-9, "{v} {a} -> {b}: {got}");
+        };
+        ok(5.0, "km", "miles", 3.106_855_96);
+        ok(1.0, "Mile", "km", 1.609_344);
+        ok(100.0, "c", "f", 212.0);
+        ok(32.0, "Fahrenheit", "celsius", 0.0);
+        ok(0.0, "\u{b0}C", "K", 273.15);
+        ok(2.0, "lbs", "kg", 0.907_184_74);
+        ok(90.0, "min", "h", 1.5);
+        ok(90.0, "m", "hours", 1.5); // "m" beside a time unit is minutes
+        ok(1.0, "GB", "mb", 1024.0);
+        ok(60.0, "mph", "km/h", 96.560_64);
+        ok(1.0, "cup", "ml", 236.588_236_5);
+        assert!(convert(1.0, "kg", "km").unwrap_err().contains("can't"));
+        assert!(convert(1.0, "parsec", "km").is_err());
+        assert_eq!(pretty(3.106_855_96), "3.1069");
+        assert_eq!(pretty(1500.0), "1500");
+        assert_eq!(pretty(0.1 + 0.2), "0.3");
+    }
+
+    #[test]
+    fn dice_and_picks() {
+        let (rolls, total) = roll_dice("3d6").unwrap();
+        assert_eq!(rolls.len(), 3);
+        assert!(rolls.iter().all(|r| (1..=6).contains(r)) && total == rolls.iter().sum::<u32>());
+        assert!((1..=20).contains(&roll_dice("d20").unwrap().1));
+        assert!((1..=6).contains(&roll_dice("").unwrap().1));
+        for bad in ["0d6", "99d6", "2d1", "banana", "2d"] {
+            assert!(roll_dice(bad).is_err(), "{bad}");
+        }
+        let opts = vec!["tea".to_string(), "coffee".to_string()];
+        assert!(opts.contains(pick_one(&opts).unwrap()));
+        assert!(pick_one(&[]).is_none());
+        assert_eq!(random_tool(&json!({"kind": "number", "min": 4, "max": "4"}))["result"], 4, "text numbers are read too");
+        assert_eq!(random_tool(&json!({"kind": "pick", "options": "only"}))["result"], "only");
+        assert_eq!(random_tool(&json!({"kind": "pick"}))["ok"], false);
     }
 
     #[test]

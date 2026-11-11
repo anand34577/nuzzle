@@ -160,7 +160,12 @@ async fn serve(core: Arc<Core>, mut stream: TcpStream) -> std::io::Result<()> {
             let Some(text) = prompt_of(path, &v) else {
                 return reply(&mut stream, "400 Bad Request", &json!({"error": "send {\"text\": \"...\"} (up to 4000 characters)"})).await;
             };
-            match brain::respond_remote(core.clone(), text, brain::Origin::Api).await {
+            // Quick commands ("/timer 10m tea") answer at once, without the model.
+            let answer = match crate::quick::parse(&text) {
+                Some(cmd) => Ok(crate::quick::run(&core, cmd).await),
+                None => brain::respond_remote(core.clone(), text, brain::Origin::Api).await,
+            };
+            match answer {
                 Ok(answer) if path == "/message" => reply(&mut stream, "200 OK", &json!({"reply": answer})).await,
                 Ok(answer) => {
                     let out = json!({

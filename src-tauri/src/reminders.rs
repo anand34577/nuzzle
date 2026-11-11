@@ -14,7 +14,13 @@ pub struct Reminder {
     /// Unix seconds.
     pub due: u64,
     pub text: String,
+    /// Seconds between repeats; 0 = said once.
+    #[serde(default)]
+    pub every: u64,
 }
+
+/// Shortest gap between repeats, so a slip can't make me nag every few seconds.
+pub const MIN_EVERY: u64 = 60;
 
 pub fn load(path: &Path) -> Vec<Reminder> {
     fs::read_to_string(path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
@@ -29,7 +35,13 @@ pub fn save(path: &Path, list: &[Reminder]) -> io::Result<()> {
     fs::rename(&tmp, path)
 }
 
+#[cfg(test)]
 pub fn add(list: &mut Vec<Reminder>, now: u64, in_secs: u64, text: &str) -> Result<Reminder, String> {
+    add_repeating(list, now, in_secs, 0, text)
+}
+
+/// Like `add`, repeating every `every` seconds after the first time (0 = once).
+pub fn add_repeating(list: &mut Vec<Reminder>, now: u64, in_secs: u64, every: u64, text: &str) -> Result<Reminder, String> {
     let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if text.is_empty() {
         return Err("What should I remind you about?".into());
@@ -40,18 +52,25 @@ pub fn add(list: &mut Vec<Reminder>, now: u64, in_secs: u64, text: &str) -> Resu
     if !(1..=MAX_SECS).contains(&in_secs) {
         return Err("I can set reminders from one second up to a year ahead.".into());
     }
+    if every != 0 && !(MIN_EVERY..=MAX_SECS).contains(&every) {
+        return Err("A repeating reminder can repeat every minute at the fastest.".into());
+    }
     if list.len() >= MAX_REMINDERS {
         return Err(format!("You already have {MAX_REMINDERS} reminders. Clear a few first."));
     }
-    let r = Reminder { id: list.iter().map(|r| r.id).max().unwrap_or(0) + 1, due: now + in_secs, text };
+    let r = Reminder { id: list.iter().map(|r| r.id).max().unwrap_or(0) + 1, due: now + in_secs, text, every };
     list.push(r.clone());
     Ok(r)
 }
 
-/// Remove and return everything due at `now`, oldest first.
+/// Remove and return everything due at `now`, oldest first. Repeating reminders stay, moved on to their next time
+/// (one that was missed several times over, e.g. while the computer slept, is said once, not once per miss).
 pub fn take_due(list: &mut Vec<Reminder>, now: u64) -> Vec<Reminder> {
     let mut due: Vec<Reminder> = list.iter().filter(|r| r.due <= now).cloned().collect();
-    list.retain(|r| r.due > now);
+    list.retain(|r| r.due > now || r.every > 0);
+    for r in list.iter_mut().filter(|r| r.due <= now) {
+        r.due += ((now - r.due) / r.every + 1) * r.every;
+    }
     due.sort_by_key(|r| r.due);
     due
 }
@@ -109,6 +128,21 @@ mod tests {
         assert_eq!(due.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(), ["early", "late"]);
         assert_eq!(l.len(), 1);
         assert!(take_due(&mut l, 400).is_empty());
+    }
+
+    #[test]
+    fn repeating_reminders_come_back() {
+        let mut l = vec![];
+        add_repeating(&mut l, 0, 100, 3600, "drink water").unwrap();
+        assert!(add_repeating(&mut l, 0, 100, 5, "too fast").is_err());
+        assert_eq!(take_due(&mut l, 100).len(), 1);
+        assert_eq!((l.len(), l[0].due), (1, 3700));
+        // Missed three times over while asleep: said once, next one in the future.
+        assert_eq!(take_due(&mut l, 3700 + 3 * 3600 + 5).len(), 1);
+        assert_eq!(l[0].due, 3700 + 4 * 3600);
+        // Files written before repeats existed still load.
+        let old: Vec<Reminder> = serde_json::from_str(r#"[{"id":1,"due":5,"text":"x"}]"#).unwrap();
+        assert_eq!(old[0].every, 0);
     }
 
     #[test]

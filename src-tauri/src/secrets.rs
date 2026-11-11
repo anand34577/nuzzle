@@ -48,6 +48,9 @@ fn fields(s: &mut Settings) -> Vec<(String, &mut String)> {
     }
     out.push(("telegram:token".to_string(), &mut s.telegram_token));
     out.push(("agent-api:token".to_string(), &mut s.agent_api_token));
+    out.push(("llm-api:key".to_string(), &mut s.llm_api_key));
+    out.push(("stt-api:key".to_string(), &mut s.stt_api_key));
+    out.push(("tts-api:key".to_string(), &mut s.tts_api_key));
     for m in &mut s.mcp_servers {
         for (k, v) in &mut m.env {
             out.push((format!("mcp:{}:env:{}", m.name, k), v));

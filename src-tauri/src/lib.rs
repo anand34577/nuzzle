@@ -7,16 +7,19 @@ mod avoid;
 mod brain;
 mod control;
 mod download;
+mod hello;
 mod job;
 mod log;
 mod mcp;
 mod memory;
+mod quick;
 mod reminders;
 mod roam;
 mod screen;
 mod secrets;
 mod settings;
 mod setup;
+mod speech;
 mod sys;
 mod telegram;
 mod tools;
@@ -141,6 +144,11 @@ pub struct Core {
     pub telegram_bot: Mutex<Option<String>>,
     /// The approval card posted to Telegram (chat, message), so its buttons can be removed once answered.
     pub tg_approval: Mutex<Option<(i64, i64)>>,
+    /// The bundled speech server: {"state": off|starting|ready|error, "detail": text}, and its wake-up call.
+    pub speech: Mutex<Value>,
+    pub speech_restart: Notify,
+    /// How the user's voice sounded in the utterance being answered ("cheerful", "worried"), when the ears can tell.
+    pub feeling: Mutex<Option<String>>,
 }
 
 /// Held while a conversation turn is in progress; the companion doesn't wander off until it is dropped.
@@ -220,7 +228,7 @@ impl Core {
             "screen": self.screen.load(Ordering::Relaxed),
             "hands": self.hands.load(Ordering::Relaxed),
             "roam": self.roam.load(Ordering::Relaxed),
-            "configured": !s.model.trim().is_empty(),
+            "configured": s.configured(),
             "ready": self.ready.load(Ordering::Relaxed),
             "name": s.name,
             "character": s.character,
@@ -295,10 +303,11 @@ impl Core {
         });
     }
 
-    pub fn remind_add(&self, in_secs: u64, text: &str) -> Result<reminders::Reminder, String> {
+    /// Add a reminder `in_secs` from now; `every` > 0 makes it repeat that many seconds apart.
+    pub fn remind_add(&self, in_secs: u64, every: u64, text: &str) -> Result<reminders::Reminder, String> {
         let r = {
             let mut list = self.reminders.lk();
-            let r = reminders::add(&mut list, sys::unix_now(), in_secs, text)?;
+            let r = reminders::add_repeating(&mut list, sys::unix_now(), in_secs, every, text)?;
             if let Err(e) = reminders::save(&self.reminders_path, &list) {
                 list.retain(|x| x.id != r.id);
                 return Err(format!("I couldn't save that reminder ({e})."));
@@ -321,6 +330,16 @@ impl Core {
         }
         self.emit("reminders", json!(null));
         Ok(())
+    }
+
+    /// Start a fresh conversation: the model forgets this session's chat (long-term memory stays).
+    pub fn forget_chat(self: &Arc<Self>) {
+        self.transcript.lk().clear();
+        self.emit("transcript", json!(null));
+        let c = self.clone();
+        tauri::async_runtime::spawn(async move {
+            c.history.lock().await.clear(); // waits for a turn in progress to finish
+        });
     }
 
     /// Say a due reminder out loud, and bring the companion back on screen if it was hidden.
@@ -563,8 +582,7 @@ fn list_transcript(core: State<'_, Arc<Core>>) -> Vec<Value> {
 
 #[tauri::command]
 fn clear_transcript(core: State<'_, Arc<Core>>) {
-    core.transcript.lk().clear();
-    core.emit("transcript", json!(null));
+    core.inner().forget_chat(); // the model forgets it too, not only the list on screen
 }
 
 #[tauri::command]
@@ -628,10 +646,26 @@ fn send_text(core: State<'_, Arc<Core>>, text: String) -> Result<(), String> {
     if t.chars().count() > 2000 {
         return Err("That message is too long (2000 characters max).".into());
     }
-    if !core.ready.load(Ordering::SeqCst) {
-        return Err("I'm still waking up. Give me a moment.".into());
-    }
     let c = core.inner().clone();
+    // Slash commands (/timer, /note, /calc ...) are done at once and don't need the model.
+    if let Some(cmd) = quick::parse(&t) {
+        tauri::async_runtime::spawn(async move {
+            let reply = quick::run(&c, cmd).await;
+            c.touch();
+            c.transcript_add("user", &t);
+            c.transcript_add("assistant", &reply);
+            c.emit("quick", json!(reply));
+        });
+        return Ok(());
+    }
+    if !core.ready.load(Ordering::SeqCst) {
+        let why = if core.settings.lk().model.trim().is_empty() {
+            "I have no brain yet: open Settings -> Setup to download one. Until then I can still do quick things; type /help."
+        } else {
+            "I'm still waking up. Give me a moment, or type /help for things I can do right now."
+        };
+        return Err(why.into());
+    }
     tauri::async_runtime::spawn(brain::respond_text(c, t));
     Ok(())
 }
@@ -669,6 +703,12 @@ fn remote_status(core: State<'_, Arc<Core>>) -> Value {
         "api": {"enabled": s.agent_api_enabled, "port": s.agent_api_port, "lan": s.agent_api_lan,
             "url": format!("http://{}:{}", if s.agent_api_lan { "<this computer's address>" } else { "127.0.0.1" }, s.agent_api_port)},
     })
+}
+
+/// The bundled speech server's state, for Settings -> Advanced.
+#[tauri::command]
+fn speech_status(core: State<'_, Arc<Core>>) -> Value {
+    core.speech.lk().clone()
 }
 
 #[tauri::command]
@@ -856,6 +896,7 @@ fn set_flag(core: State<'_, Arc<Core>>, name: String, value: bool) {
         }
         "hands" => {
             core.hands.store(value, Ordering::SeqCst);
+            brain::prime(core.inner().clone()); // the tool list changed: get the new prompt ready now, not on the next request
             if !value {
                 core.stop_gen.fetch_add(1, Ordering::SeqCst);
                 core.answer_approval(false);
@@ -881,12 +922,14 @@ fn save_settings(core: State<'_, Arc<Core>>, mut settings: Settings) -> Result<b
     settings.mic_on = core.mic.load(Ordering::SeqCst);
     settings.screen_on = core.screen.load(Ordering::SeqCst);
     settings.voice_variant = core.settings.lk().voice_variant; // changed by "try another voice", not by the form
+    settings.hello_day = core.settings.lk().hello_day.clone(); // written by the morning hello
     settings.telegram_chats = core.settings.lk().telegram_chats.clone(); // paired from the phone, removed by telegram_unpair
     settings.save(&core.settings_path).map_err(|e| {
         log::warn(&format!("saving settings failed: {e}"));
         format!("I couldn't save your settings ({e}).")
     })?;
     let character = settings.character.clone();
+    let speech_changed = speech::key(&core.settings.lk()) != speech::key(&settings);
     let (mcp_changed, server_changed, shortcuts_changed, voice_changed, remote_changed) = {
         let old = core.settings.lk();
         (
@@ -905,6 +948,9 @@ fn save_settings(core: State<'_, Arc<Core>>, mut settings: Settings) -> Result<b
     core.apply_size();
     if mcp_changed {
         core.inner().mcp_reload();
+    }
+    if speech_changed {
+        core.speech_restart.notify_one();
     }
     if remote_changed {
         core.remote_restart.notify_waiters();
@@ -1227,6 +1273,7 @@ pub fn run() {
             focus_main,
             summon,
             remote_status,
+            speech_status,
             telegram_pair_code,
             telegram_unpair,
             new_api_token,
@@ -1340,6 +1387,9 @@ pub fn run() {
                 pair_code: Mutex::new(None),
                 telegram_bot: Mutex::new(None),
                 tg_approval: Mutex::new(None),
+                speech: Mutex::new(json!({"state": "off", "detail": ""})),
+                speech_restart: Notify::new(),
+                feeling: Mutex::new(None),
             });
             app.manage(core.clone());
             build_tray(app, &core)?;
@@ -1395,11 +1445,14 @@ pub fn run() {
             core.mcp_reload();
             let c = core.clone();
             tauri::async_runtime::spawn(async move {
+                // Reminders that came due while the app was closed wait until the character is on screen to say them.
+                tokio::time::sleep(Duration::from_secs(8)).await;
                 loop {
                     tokio::time::sleep(Duration::from_secs(2)).await;
+                    let now = sys::unix_now();
                     let due = {
                         let mut list = c.reminders.lk();
-                        let due = reminders::take_due(&mut list, sys::unix_now());
+                        let due = reminders::take_due(&mut list, now);
                         if !due.is_empty() {
                             let _ = reminders::save(&c.reminders_path, &list);
                         }
@@ -1409,7 +1462,9 @@ pub fn run() {
                         c.emit("reminders", json!(null));
                     }
                     for r in due {
-                        c.announce(&r.text);
+                        // More than five minutes late means I wasn't running (or the computer slept) at the time.
+                        let late = r.every == 0 && now.saturating_sub(r.due) > 300;
+                        c.announce(&if late { format!("{} (this was due earlier, while I was away)", r.text) } else { r.text });
                         tokio::time::sleep(Duration::from_secs(4)).await;
                     }
                 }
@@ -1417,6 +1472,8 @@ pub fn run() {
             spawn_hit_tester(core.clone());
             roam::spawn(core.clone());
             telegram::spawn(core.clone());
+            speech::spawn(core.clone());
+            hello::spawn(core.clone());
             agent_api::spawn(core.clone());
             tauri::async_runtime::spawn(brain::run(core));
             Ok(())

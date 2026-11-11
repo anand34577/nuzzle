@@ -39,6 +39,7 @@ html, body {
   transition: opacity .18s ease, transform .32s cubic-bezier(.34, 1.56, .64, 1);   /* a little overshoot: pops in like a bubble */
 }
 #bubble { overflow-y: auto; }
+#bubble-text { white-space: pre-line; }   /* quick-command answers come in lines */
 #bubble.hidden, #thought.hidden { opacity: 0; transform: translateY(8px) scale(.82); pointer-events: none; }
 #bubble.notice { background: var(--warn-bg); border-color: var(--warn-edge); }
 #bubble .caret { display: none; width: 2px; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--ink-2); animation: blink 1s steps(2) infinite; }
@@ -148,6 +149,7 @@ button:focus-visible, #chat input:focus-visible { outline: 2px solid #8ab4ff; ou
 /* right-click menu: what we can do together, with a row of little need meters */
 #menu { position: absolute; z-index: 9; min-width: 190px; padding: 5px; border-radius: 12px; background: var(--paper); border: 1px solid var(--edge);
   box-shadow: 0 6px 18px rgba(0,0,0,.18); display: flex; flex-direction: column; gap: 1px; transition: opacity .12s ease, transform .12s ease; }
+#menu { max-height: calc(100vh - 12px); overflow-y: auto; }   /* a small character has a short window */
 #menu.hidden { opacity: 0; transform: scale(.92) translateY(4px); pointer-events: none; }
 #menu button { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; text-align: left; padding: 7px 11px; border: 0; border-radius: 7px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
 #menu button:hover, #menu button:focus-visible { background: var(--paper-2); outline: none; }
